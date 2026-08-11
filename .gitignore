@@ -1,0 +1,12 @@
+# Local secrets and credentials
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# Terraform local and sensitive artifacts
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
