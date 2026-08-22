@@ -28,7 +28,7 @@ resource "proxmox_virtual_environment_vm" "tf_dev01" {
     datastore_id = "local-lvm"
     interface    = "scsi0"
     size         = 20
-    import_from  = proxmox_download_file.rocky_10_cloud_image.id
+    import_from  = data.proxmox_file.rocky_10_cloud_image.id
   }
 
   scsi_hardware = "virtio-scsi-single"
