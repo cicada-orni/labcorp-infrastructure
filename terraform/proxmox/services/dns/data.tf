@@ -1,5 +1,8 @@
-data "proxmox_virtual_environment_pool" "terraform_dev" {
-  pool_id = "terraform-dev"
+data "proxmox_file" "rocky_bootstrap" {
+  node_name    = "pve-node01"
+  datastore_id = "local"
+  content_type = "snippets"
+  file_name    = "labcorp-rocky-bootstrap.yaml"
 }
 
 data "proxmox_file" "rocky_10_cloud_image" {
