@@ -1,0 +1,11 @@
+- name: Verify connectivity to DNS servers
+  hosts: dns_servers
+  gather_facts: false
+  tasks:
+    - name: Verify Ansible connectivity
+      ansible.builtin.ping:
+    - name: Verify administrative access
+      become: true
+      ansible.builtin.command: whoami
+      changed_when: false
+
