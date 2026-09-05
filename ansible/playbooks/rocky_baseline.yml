@@ -1,0 +1,87 @@
+- name: Apply LabCorp Rocky Linux baseline
+  hosts: dns_servers
+  gather_facts: true
+  become: true
+  tasks:
+
+    - name: Verify supported Rocky Linux platform
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == "Rocky"
+          - ansible_distribution_major_version == "10"
+        success_msg: LabCorp platform check passed for {{ ansible_distribution }} {{ ansible_distribution_version }}
+        fail_msg: LabCorp Rocky Linux baseline requires Rocky Linux 10.x
+
+    - name: Collect installed package information
+      ansible.builtin.package_facts:
+
+    - name: Display current Chrony package information
+      ansible.builtin.debug:
+        var: ansible_facts.packages.chrony
+
+    - name: Collect service information
+      ansible.builtin.service_facts:
+
+    - name: Display current Chrony service information
+      ansible.builtin.debug:
+        var: ansible_facts.services["chronyd.service"]
+    
+    - name: Inspect configured timezone
+      ansible.builtin.command:
+        cmd: timedatectl show --property=Timezone --value
+      register: timezone_check
+      changed_when: false
+
+    - name: Display configured timezone
+      ansible.builtin.debug:
+        var: timezone_check.stdout_lines
+    
+    - name: Inspect Chrony synchronization
+      ansible.builtin.command:
+        cmd: chronyc tracking
+      register: chronyc_tracking
+      changed_when: false
+
+    - name: Display Chrony synchronization information
+      ansible.builtin.debug:
+        var: chronyc_tracking.stdout_lines
+
+    - name: Inspect Chrony time sources
+      ansible.builtin.command:
+        cmd: chronyc sources
+      register: chronyc_sources
+      changed_when: false
+
+    - name: Display Chrony time sources
+      ansible.builtin.debug:
+        var: chronyc_sources.stdout_lines
+
+    - name: Inspect active Chrony source and server directives
+      ansible.builtin.command:
+        cmd: grep -E '^(pool|server|sourcedir|allow|local)' /etc/chrony.conf
+      register: chrony_config_check
+      changed_when: false
+
+    - name: Display active Chrony source and server directives
+      ansible.builtin.debug:
+        var: chrony_config_check.stdout_lines
+
+    - name: Inspect local NTP server socket
+      ansible.builtin.command:
+        cmd: ss -H -lunp 'sport = :123'
+      register: ntp_socket_check
+      changed_when: false
+
+    - name: Display local NTP server socket information
+      ansible.builtin.debug:
+        var: ntp_socket_check.stdout_lines
+
+    - name: Inspect DHCP-provided Chrony source files
+      ansible.builtin.command:
+        cmd: ls -l /run/chrony-dhcp
+      register: chrony_dhcp_sources_check
+      changed_when: false
+
+    - name: Display DHCP-provided Chrony source files
+      ansible.builtin.debug:
+        var: chrony_dhcp_sources_check.stdout_lines
