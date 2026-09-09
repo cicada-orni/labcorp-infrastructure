@@ -1,0 +1,10 @@
+# Managed by Ansible. Manual changes will be overwritten.
+
+{% for ntp_source in rocky_baseline_ntp_sources %}
+{{ ntp_source }}
+{% endfor %}
+
+driftfile /var/lib/chrony/drift
+makestep 1.0 3
+rtcsync
+port 0
