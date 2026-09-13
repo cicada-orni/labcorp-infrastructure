@@ -6,6 +6,19 @@
     rocky_baseline_timezone: "Etc/UTC"
     rocky_baseline_ntp_sources:
       - "pool 2.rocky.pool.ntp.org iburst" 
+    rocky_baseline_approved_repository_ids:
+      - "appstream"
+      - "baseos"
+      - "extras"
+    rocky_baseline_approved_gpg_key_setting: "gpgkey = file:///etc/pki/rpm-gpg/RPM-GPG-KEY-Rocky-10"
+    rocky_baseline_required_packages:
+      - "chrony"
+      - "openssh-server"
+      - "sudo"
+      - "firewalld"
+      - "policycoreutils"
+      - "audit"
+      - "qemu-guest-agent"
   tasks:
 
     - name: Verify supported Rocky Linux platform
@@ -16,10 +29,63 @@
         success_msg: LabCorp platform check passed for {{ ansible_distribution }} {{ ansible_distribution_version }}
         fail_msg: LabCorp Rocky Linux baseline requires Rocky Linux 10.x
 
-    - name: Ensure Chrony package is installed
+    - name: Inspect enabled DNF repositories
+      ansible.builtin.command:
+        cmd: dnf -q repolist --enabled
+      register: dnf_enabled_repositories_check
+      changed_when: false
+
+    - name: Record enabled DNF repository IDs
+      ansible.builtin.set_fact:
+        rocky_baseline_enabled_repository_ids: "{{ dnf_enabled_repositories_check.stdout_lines[1:] | map('split') | map('first') | list }}"
+
+    - name: Verify only approved DNF repositories are enabled
+      ansible.builtin.assert:
+        that:
+          - (rocky_baseline_enabled_repository_ids | difference(rocky_baseline_approved_repository_ids) | length) == 0
+        success_msg: "Only approved DNF repositories are enabled"
+        fail_msg: "Unapproved enabled DNF repositories detected: {{ rocky_baseline_enabled_repository_ids | difference(rocky_baseline_approved_repository_ids) }}"
+
+    - name: Inspect package-signature settings for enabled DNF repositories
+      ansible.builtin.command:
+        cmd: "dnf config-manager --dump {{ item }}"
+      loop: "{{ rocky_baseline_enabled_repository_ids }}"
+      register: dnf_repository_configuration_checks
+      changed_when: false
+
+
+    - name: Verify package-signature checking for each enabled DNF repository
+      ansible.builtin.assert:
+        that:
+          - "'gpgcheck = 1' in item.stdout_lines"
+          - "rocky_baseline_approved_gpg_key_setting in item.stdout_lines"
+        quiet: true
+      loop: "{{ dnf_repository_configuration_checks.results }}"
+      loop_control:
+        label: "{{item.item}}"
+
+
+    - name: Ensure required baseline packages are installed
       ansible.builtin.package:
-        name: chrony
+        name: "{{ rocky_baseline_required_packages }}"
         state: present
+
+    - name: Inspect available DNF package updates
+      ansible.builtin.command:
+        cmd: dnf check-upgrade
+      register: dnf_available_updates_check
+      changed_when: false
+      failed_when: dnf_available_updates_check.rc not in [0, 100]
+
+    - name: Report available DNF package updates
+      ansible.builtin.debug:
+        msg: "DNF package updates are available; installation requires an approved maintenance action"
+      when: dnf_available_updates_check.rc == 100
+
+    - name: Report no available DNF pacakage updates
+      ansible.builtin.debug:
+        msg: "No DNF package updates are currently available"
+      when: dnf_available_updates_check.rc == 0
 
     - name: Ensure approved timezone is configured
       community.general.timezone:
@@ -53,6 +119,15 @@
 
     - name: Collect installed package information
       ansible.builtin.package_facts:
+
+
+    - name: Verify required baseline packages are installed
+      ansible.builtin.assert:
+        that:
+          item in ansible_facts.packages
+        fail_msg: "Required baseline package is missing: {{ item }}"
+        quiet: true
+      loop: "{{ rocky_baseline_required_packages }}"
 
     - name: Display current Chrony package information
       ansible.builtin.debug:
