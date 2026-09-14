@@ -1,11 +1,11 @@
 - name: Apply LabCorp Rocky Linux baseline
   hosts: dns_servers
   gather_facts: true
-  become: true
-  vars: 
+  become: true  
+  vars:
     rocky_baseline_timezone: "Etc/UTC"
     rocky_baseline_ntp_sources:
-      - "pool 2.rocky.pool.ntp.org iburst" 
+      - "pool 2.rocky.pool.ntp.org iburst"
     rocky_baseline_approved_repository_ids:
       - "appstream"
       - "baseos"
@@ -19,190 +19,209 @@
       - "policycoreutils"
       - "audit"
       - "qemu-guest-agent"
+
   tasks:
+    - name: "RLB-001 | Platform eligibility and fail-safe targeting"
+      tags:
+        - always
+        - rlb_001
+      block:
+        - name: "RLB-001 | Verify supported Rocky Linux platform"
+          ansible.builtin.assert:
+            that:
+              - ansible_distribution == "Rocky"
+              - ansible_distribution_major_version == "10"
+            success_msg: "LabCorp platform check passed for {{ ansible_distribution }} {{ ansible_distribution_version }}"
+            fail_msg: "LabCorp Rocky Linux baseline requires Rocky Linux 10.x"
 
-    - name: Verify supported Rocky Linux platform
-      ansible.builtin.assert:
-        that:
-          - ansible_distribution == "Rocky"
-          - ansible_distribution_major_version == "10"
-        success_msg: LabCorp platform check passed for {{ ansible_distribution }} {{ ansible_distribution_version }}
-        fail_msg: LabCorp Rocky Linux baseline requires Rocky Linux 10.x
+    - name: "RLB-004 | Approved repositories and package trust"
+      tags:
+        - rlb_004
+      block:
+        - name: "RLB-004 | Inspect enabled DNF repositories"
+          ansible.builtin.command:
+            cmd: dnf -q repolist --enabled
+          register: dnf_enabled_repositories_check
+          changed_when: false
 
-    - name: Inspect enabled DNF repositories
-      ansible.builtin.command:
-        cmd: dnf -q repolist --enabled
-      register: dnf_enabled_repositories_check
-      changed_when: false
+        - name: "RLB-004 | Record enabled DNF repository IDs"
+          ansible.builtin.set_fact:
+            rocky_baseline_enabled_repository_ids: "{{ dnf_enabled_repositories_check.stdout_lines[1:] | map('split') | map('first') | list }}"
 
-    - name: Record enabled DNF repository IDs
-      ansible.builtin.set_fact:
-        rocky_baseline_enabled_repository_ids: "{{ dnf_enabled_repositories_check.stdout_lines[1:] | map('split') | map('first') | list }}"
+        - name: "RLB-004 | Verify only approved DNF repositories are enabled"
+          ansible.builtin.assert:
+            that:
+              - (rocky_baseline_enabled_repository_ids | difference(rocky_baseline_approved_repository_ids) | length) == 0
+            success_msg: "Only approved DNF repositories are enabled"
+            fail_msg: "Unapproved enabled DNF repositories detected: {{ rocky_baseline_enabled_repository_ids | difference(rocky_baseline_approved_repository_ids) }}"
 
-    - name: Verify only approved DNF repositories are enabled
-      ansible.builtin.assert:
-        that:
-          - (rocky_baseline_enabled_repository_ids | difference(rocky_baseline_approved_repository_ids) | length) == 0
-        success_msg: "Only approved DNF repositories are enabled"
-        fail_msg: "Unapproved enabled DNF repositories detected: {{ rocky_baseline_enabled_repository_ids | difference(rocky_baseline_approved_repository_ids) }}"
+        - name: "RLB-004 | Inspect package-signature settings for enabled DNF repositories"
+          ansible.builtin.command:
+            cmd: "dnf config-manager --dump {{ item }}"
+          loop: "{{ rocky_baseline_enabled_repository_ids }}"
+          register: dnf_repository_configuration_checks
+          changed_when: false
 
-    - name: Inspect package-signature settings for enabled DNF repositories
-      ansible.builtin.command:
-        cmd: "dnf config-manager --dump {{ item }}"
-      loop: "{{ rocky_baseline_enabled_repository_ids }}"
-      register: dnf_repository_configuration_checks
-      changed_when: false
+        - name: "RLB-004 | Verify package-signature checking for each enabled DNF repository"
+          ansible.builtin.assert:
+            that:
+              - "'gpgcheck = 1' in item.stdout_lines"
+              - "rocky_baseline_approved_gpg_key_setting in item.stdout_lines"
+            quiet: true              
+          loop: "{{ dnf_repository_configuration_checks.results }}"
+          loop_control:
+            label: "{{ item.item }}"
+          
 
+    - name: "RLB-005 | Minimum package set"
+      tags:
+        - rlb_005
+      block:
+        - name: "RLB-005 | Ensure required baseline packages are installed"
+          ansible.builtin.package:
+            name: "{{ rocky_baseline_required_packages }}"
+            state: present
 
-    - name: Verify package-signature checking for each enabled DNF repository
-      ansible.builtin.assert:
-        that:
-          - "'gpgcheck = 1' in item.stdout_lines"
-          - "rocky_baseline_approved_gpg_key_setting in item.stdout_lines"
-        quiet: true
-      loop: "{{ dnf_repository_configuration_checks.results }}"
-      loop_control:
-        label: "{{item.item}}"
+        - name: "RLB-005 | Collect installed package information"
+          ansible.builtin.package_facts:
 
+        - name: "RLB-005 | Verify required baseline packages are installed"
+          ansible.builtin.assert:
+            that:
+              - item in ansible_facts.packages
+            fail_msg: "Required baseline package is missing: {{ item }}"
+            quiet: true
+          loop: "{{ rocky_baseline_required_packages }}"
 
-    - name: Ensure required baseline packages are installed
-      ansible.builtin.package:
-        name: "{{ rocky_baseline_required_packages }}"
-        state: present
+        - name: "RLB-005 | Display current Chrony package information"
+          ansible.builtin.debug:
+            var: ansible_facts.packages.chrony
 
-    - name: Inspect available DNF package updates
-      ansible.builtin.command:
-        cmd: dnf check-upgrade
-      register: dnf_available_updates_check
-      changed_when: false
-      failed_when: dnf_available_updates_check.rc not in [0, 100]
+    - name: "RLB-006 | Controlled patching"
+      tags:
+        - rlb_006
+      block:
+        - name: "RLB-006 | Inspect available DNF package updates"
+          ansible.builtin.command:
+            cmd: dnf check-upgrade
+          register: dnf_available_updates_check
+          changed_when: false
+          failed_when: dnf_available_updates_check.rc not in [0, 100]
 
-    - name: Report available DNF package updates
-      ansible.builtin.debug:
-        msg: "DNF package updates are available; installation requires an approved maintenance action"
-      when: dnf_available_updates_check.rc == 100
+        - name: "RLB-006 | Report available DNF package updates"
+          ansible.builtin.debug:
+            msg: "DNF package updates are available; installation requires an approved maintenance action"
+          when: dnf_available_updates_check.rc == 100
 
-    - name: Report no available DNF pacakage updates
-      ansible.builtin.debug:
-        msg: "No DNF package updates are currently available"
-      when: dnf_available_updates_check.rc == 0
+        - name: "RLB-006 | Report no available DNF package updates"
+          ansible.builtin.debug:
+            msg: "No DNF package updates are currently available"
+          when: dnf_available_updates_check.rc == 0
 
-    - name: Ensure approved timezone is configured
-      community.general.timezone:
-        name: "{{ rocky_baseline_timezone }}"
+    - name: "RLB-003 | Timezone and Chrony synchronization"
+      tags:
+        - rlb_003
+      block:
+        - name: "RLB-003 | Ensure approved timezone is configured"
+          community.general.timezone:
+            name: "{{ rocky_baseline_timezone }}"
 
-    - name: Ensure approved Chrony configuration is deployed
-      ansible.builtin.template:
-        src: templates/chrony.conf.j2
-        dest: /etc/chrony.conf
-        owner: root
-        group: root
-        mode: "0644"
-        backup: true
-        validate: "/usr/sbin/chronyd -p -f %s"
-      notify: Restart Chrony
+        - name: "RLB-003 | Ensure approved Chrony configuration is deployed"
+          ansible.builtin.template:
+            src: templates/chrony.conf.j2
+            dest: /etc/chrony.conf
+            owner: root
+            group: root
+            mode: "0644"
+            backup: true
+            validate: "/usr/sbin/chronyd -p -f %s"
+          notify: "RLB-003 | Restart Chrony"
 
-    - name: Ensure Chrony service is enabled and running
-      ansible.builtin.systemd_service:
-        name: chronyd.service
-        state: started
-        enabled: true
+        - name: "RLB-003 | Ensure Chrony service is enabled and running"
+          ansible.builtin.systemd_service:
+            name: chronyd.service
+            state: started
+            enabled: true
 
-    - name: Run pending handlers before verification
-      ansible.builtin.meta: flush_handlers
+        - name: "RLB-003 | Run pending handlers before verification"
+          ansible.builtin.meta: flush_handlers
 
-    - name: Wait for Chrony synchronization
-      ansible.builtin.command:
-        cmd: chronyc waitsync 30
-      changed_when: false
+        - name: "RLB-003 | Wait for Chrony synchronization"
+          ansible.builtin.command:
+            cmd: chronyc waitsync 30
+          changed_when: false
 
+        - name: "RLB-003 | Collect service information"
+          ansible.builtin.service_facts:
 
-    - name: Collect installed package information
-      ansible.builtin.package_facts:
+        - name: "RLB-003 | Display current Chrony service information"
+          ansible.builtin.debug:
+            var: ansible_facts.services["chronyd.service"]
 
+        - name: "RLB-003 | Inspect configured timezone"
+          ansible.builtin.command:
+            cmd: timedatectl show --property=Timezone --value
+          register: timezone_check
+          changed_when: false
 
-    - name: Verify required baseline packages are installed
-      ansible.builtin.assert:
-        that:
-          item in ansible_facts.packages
-        fail_msg: "Required baseline package is missing: {{ item }}"
-        quiet: true
-      loop: "{{ rocky_baseline_required_packages }}"
+        - name: "RLB-003 | Display configured timezone"
+          ansible.builtin.debug:
+            var: timezone_check.stdout_lines
 
-    - name: Display current Chrony package information
-      ansible.builtin.debug:
-        var: ansible_facts.packages.chrony
+        - name: "RLB-003 | Inspect Chrony synchronization"
+          ansible.builtin.command:
+            cmd: chronyc tracking
+          register: chronyc_tracking
+          changed_when: false
 
-    - name: Collect service information
-      ansible.builtin.service_facts:
+        - name: "RLB-003 | Display Chrony synchronization information"
+          ansible.builtin.debug:
+            var: chronyc_tracking.stdout_lines
 
-    - name: Display current Chrony service information
-      ansible.builtin.debug:
-        var: ansible_facts.services["chronyd.service"]
-    
-    - name: Inspect configured timezone
-      ansible.builtin.command:
-        cmd: timedatectl show --property=Timezone --value
-      register: timezone_check
-      changed_when: false
+        - name: "RLB-003 | Inspect Chrony time sources"
+          ansible.builtin.command:
+            cmd: chronyc sources
+          register: chronyc_sources
+          changed_when: false
 
-    - name: Display configured timezone
-      ansible.builtin.debug:
-        var: timezone_check.stdout_lines
-    
-    - name: Inspect Chrony synchronization
-      ansible.builtin.command:
-        cmd: chronyc tracking
-      register: chronyc_tracking
-      changed_when: false
+        - name: "RLB-003 | Display Chrony time sources"
+          ansible.builtin.debug:
+            var: chronyc_sources.stdout_lines
 
-    - name: Display Chrony synchronization information
-      ansible.builtin.debug:
-        var: chronyc_tracking.stdout_lines
+        - name: "RLB-003 | Inspect active Chrony source and server directives"
+          ansible.builtin.command:
+            cmd: grep -E '^(pool|server|sourcedir|allow|local|port)' /etc/chrony.conf
+          register: chrony_config_check
+          changed_when: false
 
-    - name: Inspect Chrony time sources
-      ansible.builtin.command:
-        cmd: chronyc sources
-      register: chronyc_sources
-      changed_when: false
+        - name: "RLB-003 | Display active Chrony source and server directives"
+          ansible.builtin.debug:
+            var: chrony_config_check.stdout_lines
 
-    - name: Display Chrony time sources
-      ansible.builtin.debug:
-        var: chronyc_sources.stdout_lines
+        - name: "RLB-003 | Inspect local NTP server socket"
+          ansible.builtin.command:
+            cmd: ss -H -lunp 'sport = :123'
+          register: ntp_socket_check
+          changed_when: false
 
-    - name: Inspect active Chrony source and server directives
-      ansible.builtin.command:
-        cmd: grep -E '^(pool|server|sourcedir|allow|local|port)' /etc/chrony.conf
-      register: chrony_config_check
-      changed_when: false
+        - name: "RLB-003 | Display local NTP server socket information"
+          ansible.builtin.debug:
+            var: ntp_socket_check.stdout_lines
 
-    - name: Display active Chrony source and server directives
-      ansible.builtin.debug:
-        var: chrony_config_check.stdout_lines
+        - name: "RLB-003 | Inspect DHCP-provided Chrony source files"
+          ansible.builtin.command:
+            cmd: ls -l /run/chrony-dhcp
+          register: chrony_dhcp_sources_check
+          changed_when: false
 
-    - name: Inspect local NTP server socket
-      ansible.builtin.command:
-        cmd: ss -H -lunp 'sport = :123'
-      register: ntp_socket_check
-      changed_when: false
+        - name: "RLB-003 | Display DHCP-provided Chrony source files"
+          ansible.builtin.debug:
+            var: chrony_dhcp_sources_check.stdout_lines
 
-    - name: Display local NTP server socket information
-      ansible.builtin.debug:
-        var: ntp_socket_check.stdout_lines
-
-    - name: Inspect DHCP-provided Chrony source files
-      ansible.builtin.command:
-        cmd: ls -l /run/chrony-dhcp
-      register: chrony_dhcp_sources_check
-      changed_when: false
-
-    - name: Display DHCP-provided Chrony source files
-      ansible.builtin.debug:
-        var: chrony_dhcp_sources_check.stdout_lines
-
+        
   handlers:
-
-    - name: Restart Chrony
+    - name: "RLB-003 | Restart Chrony"
       ansible.builtin.systemd_service:
         name: chronyd.service
         state: restarted
+
