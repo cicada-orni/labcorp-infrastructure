@@ -1,7 +1,7 @@
 - name: Apply LabCorp Rocky Linux baseline
   hosts: dns_servers
   gather_facts: true
-  become: true  
+  become: true
   vars:
     rocky_baseline_timezone: "Etc/UTC"
     rocky_baseline_ntp_sources:
@@ -19,6 +19,15 @@
       - "policycoreutils"
       - "audit"
       - "qemu-guest-agent"
+    rocky_baseline_regular_uid_min: 1000
+    rocky_baseline_regular_uid_max: 60000
+    rocky_baseline_approved_human_accounts:
+      - "faisal"
+
+    # =========================================================================
+    # RLB-001 | Platform eligibility and fail-safe targeting
+    # Purpose: Stop execution when the target is not Rocky Linux 10.
+    # =========================================================================
 
   tasks:
     - name: "RLB-001 | Platform eligibility and fail-safe targeting"
@@ -33,6 +42,13 @@
               - ansible_distribution_major_version == "10"
             success_msg: "LabCorp platform check passed for {{ ansible_distribution }} {{ ansible_distribution_version }}"
             fail_msg: "LabCorp Rocky Linux baseline requires Rocky Linux 10.x"
+
+
+    # =========================================================================
+    # RLB-004 | Approved repositories and package trust
+    # Purpose: Validate enabled repositories and their GPG trust settings.
+    # =========================================================================
+
 
     - name: "RLB-004 | Approved repositories and package trust"
       tags:
@@ -67,11 +83,18 @@
             that:
               - "'gpgcheck = 1' in item.stdout_lines"
               - "rocky_baseline_approved_gpg_key_setting in item.stdout_lines"
-            quiet: true              
+            quiet: true
           loop: "{{ dnf_repository_configuration_checks.results }}"
           loop_control:
             label: "{{ item.item }}"
-          
+
+
+    # =========================================================================
+    # RLB-005 | Minimum package set
+    # Purpose: Install and verify the required operating-system packages.
+    # =========================================================================
+
+
 
     - name: "RLB-005 | Minimum package set"
       tags:
@@ -97,6 +120,13 @@
           ansible.builtin.debug:
             var: ansible_facts.packages.chrony
 
+
+    # =========================================================================
+    # RLB-006 | Controlled patching
+    # Purpose: Report available updates without installing them automatically.
+    # =========================================================================
+
+
     - name: "RLB-006 | Controlled patching"
       tags:
         - rlb_006
@@ -117,6 +147,13 @@
           ansible.builtin.debug:
             msg: "No DNF package updates are currently available"
           when: dnf_available_updates_check.rc == 0
+
+
+    # =========================================================================
+    # RLB-003 | Timezone and Chrony synchronization
+    # Purpose: Configure UTC time and verify reliable time synchronization.
+    # =========================================================================
+
 
     - name: "RLB-003 | Timezone and Chrony synchronization"
       tags:
@@ -218,7 +255,65 @@
           ansible.builtin.debug:
             var: chrony_dhcp_sources_check.stdout_lines
 
-        
+    # =========================================================================
+    # RLB-007 | Named human accounts and groups
+    # Purpose: Validate approved human accounts and identify unapproved regular accounts.
+    # =========================================================================
+
+
+    - name: "RLB-007 | Named human accounts and groups"
+      tags:
+        - rlb_007
+      block:
+        - name: "RLB-007 | Collect local account information"
+          ansible.builtin.getent:
+            database: passwd
+            service: files
+
+        - name: "RLB-007 | Verify approved human accounts exist"
+          ansible.builtin.assert:
+            that:
+              - item in ansible_facts.getent_passwd
+            quiet: true
+            fail_msg: "Approved human account is missing: {{ item }}"
+          loop: "{{ rocky_baseline_approved_human_accounts }}"
+
+        - name: "RLB-007 | Verify approved human account UIDs are in the regular range"
+          ansible.builtin.assert:
+            that:
+              - (ansible_facts.getent_passwd[item][1] | int) >= rocky_baseline_regular_uid_min
+              - (ansible_facts.getent_passwd[item][1] | int) <= rocky_baseline_regular_uid_max
+            quiet: true
+            fail_msg: "Approved human account has a UID outside the regular range: {{ item }}"
+          loop: "{{ rocky_baseline_approved_human_accounts }}"
+
+        - name: "RLB-007 | Initialize detected regular account list"
+          ansible.builtin.set_fact:
+            rocky_baseline_detected_regular_accounts: []
+
+        - name: "RLB-007 | Record detected regular accounts"
+          ansible.builtin.set_fact:
+            rocky_baseline_detected_regular_accounts: "{{ rocky_baseline_detected_regular_accounts + [item.key] }}"
+          loop: "{{ ansible_facts.getent_passwd | dict2items }}"
+          loop_control:
+            label: "{{ item.key }}"
+          when:
+            - (item.value[1] | int) >= rocky_baseline_regular_uid_min
+            - (item.value[1] | int) <= rocky_baseline_regular_uid_max
+
+        - name: "RLB-007 | Verify no unapproved regular account exists"
+          ansible.builtin.assert:
+            that:
+              - (rocky_baseline_detected_regular_accounts | difference(rocky_baseline_approved_human_accounts) | length) == 0
+            quiet: true
+            fail_msg: "Unapproved regular accounts detected: {{ rocky_baseline_detected_regular_accounts | difference(rocky_baseline_approved_human_accounts) }}"
+
+
+  # ===========================================================================
+  # HANDLERS | Service actions triggered only when notified
+  # ===========================================================================
+
+
   handlers:
     - name: "RLB-003 | Restart Chrony"
       ansible.builtin.systemd_service:
