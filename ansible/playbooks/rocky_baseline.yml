@@ -23,6 +23,8 @@
     rocky_baseline_regular_uid_max: 60000
     rocky_baseline_approved_human_accounts:
       - "faisal"
+    rocky_baseline_sudo_admin_accounts:
+      - "faisal"
 
     # =========================================================================
     # RLB-001 | Platform eligibility and fail-safe targeting
@@ -307,6 +309,60 @@
               - (rocky_baseline_detected_regular_accounts | difference(rocky_baseline_approved_human_accounts) | length) == 0
             quiet: true
             fail_msg: "Unapproved regular accounts detected: {{ rocky_baseline_detected_regular_accounts | difference(rocky_baseline_approved_human_accounts) }}"
+
+
+    # =========================================================================
+    # RLB-008 | Sudo and privilege escalation
+    # Purpose: Manage and validate bootstrap administrative access.
+    # =========================================================================
+
+
+    - name: "RLB-008 | Sudo and privilege escalation"
+      tags:
+        - rlb_008
+      block:
+        - name: "RLB-008 | Verify sudo administrator policy is safe"
+          ansible.builtin.assert:
+            that:
+              - (rocky_baseline_sudo_admin_accounts | length) > 0
+              - (rocky_baseline_sudo_admin_accounts | difference(rocky_baseline_approved_human_accounts) | length ) == 0
+            quiet: true
+            fail_msg: "Sudo administrator policy must be non-empty and contain only approved human accounts."
+
+        - name: "RLB-008 | Deploy approved bootstrap sudo policy"
+          ansible.builtin.template:
+            src: templates/sudoers-bootstrap-admin.j2
+            dest: /etc/sudoers.d/90-cloud-init-users
+            owner: root
+            group: root
+            mode: "0440"
+            validate: "/usr/sbin/visudo -c -f %s"
+
+        - name: "RLB-008 | Collect managed sudo policy metadata"
+          ansible.builtin.stat:
+            path: /etc/sudoers.d/90-cloud-init-users
+            follow: false
+            get_checksum: false
+            get_mime: false
+            get_attributes: false
+          register: rocky_baseline_sudo_policy_stat
+            
+        - name: "RLB-008 | Verify managed sudo policy metadata"
+          ansible.builtin.assert:
+            that:
+              - rocky_baseline_sudo_policy_stat.stat.exists
+              - rocky_baseline_sudo_policy_stat.stat.isreg
+              - rocky_baseline_sudo_policy_stat.stat.islnk == false
+              - rocky_baseline_sudo_policy_stat.stat.pw_name == "root"
+              - rocky_baseline_sudo_policy_stat.stat.gr_name == "root"
+              - rocky_baseline_sudo_policy_stat.stat.mode == "0440"
+            quiet: true
+            fail_msg: "Managed sudo policy must be a root-owned regular file with mode 0440."
+
+        - name: "RLB-008 | Validate installed sudo configuration"
+          ansible.builtin.command:
+            cmd: /usr/sbin/visudo -c
+          changed_when: false
 
 
   # ===========================================================================
