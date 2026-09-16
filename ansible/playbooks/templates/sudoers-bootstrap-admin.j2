@@ -1,0 +1,6 @@
+# Managed by Ansible - LabCorp RLB-008
+# Broad passwordless sudo is an accepted bootstrap condition.
+
+{% for account in rocky_baseline_sudo_admin_accounts %}
+{{account}} ALL=(ALL) NOPASSWD: ALL
+{% endfor %}
