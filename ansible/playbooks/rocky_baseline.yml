@@ -365,6 +365,82 @@
           changed_when: false
 
 
+    # ===========================================================================
+    # RLB-009 | OpenSSH server policy
+    # ===========================================================================
+
+
+    - name: "RLB-009 | Manage OpenSSH server policy"
+      tags:
+        - rlb_009
+      block:
+        - name: "RLB-009 | Ensure OpenSSH service is enabled and running"
+          ansible.builtin.systemd_service:
+            name: sshd.service
+            enabled: true
+            state: started
+
+        - name: "RLB-009 | Deploy OpenSSH server policy"
+          ansible.builtin.template:
+            src: templates/sshd-labcorp-policy.j2
+            dest: /etc/ssh/sshd_config.d/10-labcorp-sshd-policy.conf
+            owner: root
+            group: root
+            mode: "0600"
+            validate: "/usr/sbin/sshd -t -f %s"
+          notify: "RLB-009 | Reload OpenSSH"
+
+        - name: "RLB-009 | Validate installed OpenSSH configuration"
+          ansible.builtin.command:
+            cmd: "/usr/sbin/sshd -t"
+          changed_when: false
+
+        - name: "RLB-009 | Apply validated OpenSSH configuration"
+          ansible.builtin.meta: flush_handlers
+
+        - name: "RLB-009 | Verify Ansible reconnects after OpenSSH reload"
+          ansible.builtin.wait_for_connection:
+            connect_timeout: 5
+            sleep: 2
+            timeout: 30
+
+        - name: "RLB-009 | Collect effective OpenSSH configuration"
+          ansible.builtin.command:
+            cmd: "/usr/sbin/sshd -T"
+          register: rocky_baseline_sshd_effective_config
+          changed_when: false
+
+        - name: "RLB-009 | Verify effective OpenSSH policy"
+          ansible.builtin.assert:
+            that:
+              - "'permitrootlogin no' in rocky_baseline_sshd_effective_config.stdout_lines"
+              - "'pubkeyauthentication yes' in rocky_baseline_sshd_effective_config.stdout_lines"
+              - "'passwordauthentication no' in rocky_baseline_sshd_effective_config.stdout_lines"
+              - "'kbdinteractiveauthentication no' in rocky_baseline_sshd_effective_config.stdout_lines"
+            quiet: true
+            fail_msg: "Effective OpenSSH policy does not match the required LabCorp baseline."
+
+        - name: "RLB-009 | Collect managed OpenSSH policy metadata"
+          ansible.builtin.stat:
+            path: /etc/ssh/sshd_config.d/10-labcorp-sshd-policy.conf
+            follow: false
+            get_checksum: false
+            get_mime: false
+            get_attributes: false
+          register: rocky_baseline_sshd_policy_stat
+
+        - name: "RLB-009 | Verify managed OpenSSH policy metadata"
+          ansible.builtin.assert:
+            that:
+              - rocky_baseline_sshd_policy_stat.stat.exists
+              - rocky_baseline_sshd_policy_stat.stat.isreg
+              - rocky_baseline_sshd_policy_stat.stat.islnk == false
+              - rocky_baseline_sshd_policy_stat.stat.pw_name == "root"
+              - rocky_baseline_sshd_policy_stat.stat.gr_name == "root"
+              - rocky_baseline_sshd_policy_stat.stat.mode == "0600"
+            quiet: true
+            fail_msg: "Managed OpenSSH policy must be a root-owned regular file with mode 0600."
+            
   # ===========================================================================
   # HANDLERS | Service actions triggered only when notified
   # ===========================================================================
@@ -376,3 +452,7 @@
         name: chronyd.service
         state: restarted
 
+    - name: "RLB-009 | Reload OpenSSH"
+      ansible.builtin.systemd_service:
+        name: sshd.service
+        state: reloaded
