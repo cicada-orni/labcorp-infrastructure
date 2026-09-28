@@ -440,6 +440,37 @@
               - rocky_baseline_sshd_policy_stat.stat.mode == "0600"
             quiet: true
             fail_msg: "Managed OpenSSH policy must be a root-owned regular file with mode 0600."
+
+
+    # ===========================================================================
+    # RLB-010 | SELinux enforcing policy
+    # ===========================================================================
+
+    - name: "RLB-010 | Manage SELinux enforcing policy"
+      tags:
+        - rlb_010
+      block:
+        - name: "RLB-010 | Ensure SELinux uses targeted policy in enforcing mode"
+          ansible.posix.selinux:
+            policy: targeted
+            state: enforcing
+
+        - name: "RLB-010 | Refresh SELinux facts"
+          ansible.builtin.setup:
+            filter:
+              - ansible_selinux
+
+        - name: "RLB-010 | Verify effective SELinux policy"
+          ansible.builtin.assert:
+            that:
+              - ansible_facts["selinux"]["status"] == "enabled"
+              - ansible_facts["selinux"]["mode"] == "enforcing"
+              - ansible_facts["selinux"]["config_mode"] == "enforcing"
+              - ansible_facts["selinux"]["type"] == "targeted"
+            quiet: true
+            fail_msg: "SELinux must be enabled with targeted policy and enforcing in both current and persistent configuration."
+
+    
             
   # ===========================================================================
   # HANDLERS | Service actions triggered only when notified
