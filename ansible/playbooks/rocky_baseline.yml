@@ -470,8 +470,63 @@
             quiet: true
             fail_msg: "SELinux must be enabled with targeted policy and enforcing in both current and persistent configuration."
 
-    
-            
+    # ===========================================================================
+    # RLB-011 | firewalld host policy
+    # ===========================================================================
+
+    - name: "RLB-011 | Manage firewalld host policy"
+      tags:
+        - rlb_011
+      block:
+        - name: "RLB-011 | Ensure firewalld service is enabled and running"
+          ansible.builtin.systemd_service:
+            name: firewalld.service
+            enabled: true
+            state: started
+
+        - name: "RLB-011 | Ensure management SSH service is allowed"
+          ansible.posix.firewalld:
+            zone: public
+            service: ssh
+            state: enabled
+            permanent: true
+            immediate: true
+
+        - name: "RLB-011 | Verify Ansible remains reachable"
+          ansible.builtin.wait_for_connection:
+            connect_timeout: 5
+            sleep: 2
+            timeout: 30
+
+        - name: "RLB-011 | Collect active firewalld configuration"
+          ansible.posix.firewalld_info:
+            active_zones: true
+          register: rocky_baseline_firewalld_info
+
+        - name: "RLB-011 | Collect permanent default zone"
+          ansible.builtin.command:
+            cmd: /usr/bin/firewall-cmd --get-default-zone
+          register: rocky_baseline_firewalld_permanent_default_zone
+          changed_when: false
+          check_mode: false
+
+        - name: "RLB-011 | Verify permanent management SSH service"
+          ansible.builtin.command:
+            cmd: /usr/bin/firewall-cmd --permanent --zone=public --query-service=ssh
+          changed_when: false
+          check_mode: false
+
+        - name: "RLB-011 | Verify effective firewalld policy"
+          ansible.builtin.assert:
+            that:
+              - rocky_baseline_firewalld_info.firewalld_info.default_zone == "public"
+              - "'public' in rocky_baseline_firewalld_info.collected_zones"
+              - "ansible_facts['default_ipv4']['interface'] in rocky_baseline_firewalld_info.firewalld_info.zones.public.interfaces"
+              - "'ssh' in rocky_baseline_firewalld_info.firewalld_info.zones.public.services"
+              - rocky_baseline_firewalld_permanent_default_zone.stdout == "public"
+            quiet: true
+            fail_msg: "firewalld must use the public zone for the primary interface and allow management SSH in runtime and permanent configuration."
+
   # ===========================================================================
   # HANDLERS | Service actions triggered only when notified
   # ===========================================================================
