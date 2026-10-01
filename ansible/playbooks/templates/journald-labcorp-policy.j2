@@ -1,0 +1,6 @@
+# Managed by Ansible - LabCorp RLB-012
+# Persistent journal storage with bounded disk usage
+
+[Journal]
+Storage=persistent
+SystemMaxUse={{ rocky_baseline_journal_max_use }}
