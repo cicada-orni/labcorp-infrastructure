@@ -25,6 +25,7 @@
       - "faisal"
     rocky_baseline_sudo_admin_accounts:
       - "faisal"
+    rocky_baseline_journal_max_use: "512M"
 
     # =========================================================================
     # RLB-001 | Platform eligibility and fail-safe targeting
@@ -527,6 +528,152 @@
             quiet: true
             fail_msg: "firewalld must use the public zone for the primary interface and allow management SSH in runtime and permanent configuration."
 
+    # ===========================================================================
+    # RLB-012 | Journald persistence and bounded retention
+    # Purpose: Preserve operational logs across reboots without unbounded growth.
+    # ===========================================================================
+
+    - name: "RLB-012 | Manage journald persistence and retention"
+      tags:
+        - rlb_012
+      block:
+        - name: "RLB-012 | Verify journald retention variable"
+          ansible.builtin.assert:
+            that:
+              - rocky_baseline_journal_max_use is string
+              - rocky_baseline_journal_max_use is match('^[1-9][0-9]*[KMGTPE]$')
+            quiet: true
+            fail_msg: "Journald maximum usage must be a positive size such as 512M or 1G."
+
+        - name: "RLB-012 | Ensure systemd-journald is running"
+          ansible.builtin.systemd_service:
+            name: systemd-journald.service
+            state: started
+
+        - name: "RLB-012 | Ensure journald drop-in directory exists"
+          ansible.builtin.file:
+            path: /etc/systemd/journald.conf.d
+            state: directory
+            owner: root
+            group: root
+            mode: "0755"
+
+        - name: "RLB-012 | Deploy journald persistence and retention policy"
+          ansible.builtin.template:
+            src: templates/journald-labcorp-policy.j2
+            dest: /etc/systemd/journald.conf.d/60-labcorp-journal.conf
+            owner: root
+            group: root
+            mode: "0644"
+          notify: "RLB-012 | Restart systemd-journald"
+
+        - name: "RLB-012 | Apply journald policy before validation"
+          ansible.builtin.meta: flush_handlers
+
+        - name: "RLB-012 | Validate applied journald policy"
+          when: not ansible_check_mode
+          block:
+            - name: "RLB-012 | Flush runtime journal to persistent storage"
+              ansible.builtin.command:
+                argv:
+                  - /usr/bin/journalctl
+                  - --flush
+              changed_when: false
+
+            - name: "RLB-012 | Collect systemd-journald service state"
+              ansible.builtin.command:
+                argv:
+                  - /usr/bin/systemctl
+                  - is-active
+                  - systemd-journald.service
+              register: rocky_baseline_journald_service_state
+              changed_when: false
+
+            - name: "RLB-012 | Collect effective journald configuration"
+              ansible.builtin.command:
+                argv:
+                  - /usr/bin/systemd-analyze
+                  - cat-config
+                  - --tldr
+                  - systemd/journald.conf
+              register: rocky_baseline_journald_effective_config
+              changed_when: false
+
+            - name: "RLB-012 | Collect managed journald policy metadata"
+              ansible.builtin.stat:
+                path: /etc/systemd/journald.conf.d/60-labcorp-journal.conf
+                follow: false
+                get_checksum: false
+                get_mime: false
+                get_attributes: false
+              register: rocky_baseline_journald_policy_stat
+
+            - name: "RLB-012 | Collect journal disk usage"
+              ansible.builtin.command:
+                argv:
+                  - /usr/bin/journalctl
+                  - --disk-usage
+              register: rocky_baseline_journald_disk_usage
+              changed_when: false
+
+            - name: "RLB-012 | Verify current-boot journal query"
+              ansible.builtin.command:
+                argv:
+                  - /usr/bin/journalctl
+                  - --boot=0
+                  - --lines=1
+                  - --no-pager
+              register: rocky_baseline_journald_current_boot
+              changed_when: false
+
+            - name: "RLB-012 | Collect available journal boots"
+              ansible.builtin.command:
+                argv:
+                  - /usr/bin/journalctl
+                  - --list-boots
+                  - --no-pager
+              register: rocky_baseline_journald_boot_list
+              changed_when: false
+
+            - name: "RLB-012 | Verify previous-boot journal query when available"
+              ansible.builtin.command:
+                argv:
+                  - /usr/bin/journalctl
+                  - --boot=-1
+                  - --lines=1
+                  - --no-pager
+              changed_when: false
+              when: >-
+                (
+                  rocky_baseline_journald_boot_list.stdout_lines
+                  | select('match', '^\s*-1\s')
+                  | list
+                  | length
+                ) > 0
+
+            - name: "RLB-012 | Verify effective journald policy"
+              ansible.builtin.assert:
+                that:
+                  - rocky_baseline_journald_service_state.stdout == "active"
+                  - (rocky_baseline_journald_effective_config.stdout_lines | select('match', '^Storage=') | list | last) == "Storage=persistent"
+                  - (rocky_baseline_journald_effective_config.stdout_lines | select('match', '^SystemMaxUse=') | list | last) == ("SystemMaxUse=" ~ rocky_baseline_journal_max_use)
+                  - rocky_baseline_journald_disk_usage.stdout | length > 0
+                  - rocky_baseline_journald_current_boot.stdout | length > 0
+                quiet: true
+                fail_msg: "Effective journald policy does not match the required LabCorp baseline."
+
+            - name: "RLB-012 | Verify managed journald policy metadata"
+              ansible.builtin.assert:
+                that:
+                  - rocky_baseline_journald_policy_stat.stat.exists
+                  - rocky_baseline_journald_policy_stat.stat.isreg
+                  - rocky_baseline_journald_policy_stat.stat.islnk == false
+                  - rocky_baseline_journald_policy_stat.stat.pw_name == "root"
+                  - rocky_baseline_journald_policy_stat.stat.gr_name == "root"
+                  - rocky_baseline_journald_policy_stat.stat.mode == "0644"
+                quiet: true
+                fail_msg: "Managed journald policy must be a root-owned regular file with mode 0644."
+
   # ===========================================================================
   # HANDLERS | Service actions triggered only when notified
   # ===========================================================================
@@ -542,3 +689,9 @@
       ansible.builtin.systemd_service:
         name: sshd.service
         state: reloaded
+
+    - name: "RLB-012 | Restart systemd-journald"
+      ansible.builtin.systemd_service:
+        name: systemd-journald.service
+        state: restarted
+      when: not ansible_check_mode
