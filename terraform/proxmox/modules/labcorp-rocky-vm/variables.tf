@@ -58,6 +58,7 @@ variable "ipv4" {
 variable "dns" {
   type = object({
     servers = list(string)
+    domain  = optional(string)
 
   })
 
