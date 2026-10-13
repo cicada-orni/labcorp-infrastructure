@@ -48,6 +48,7 @@ resource "proxmox_virtual_environment_vm" "vm" {
     vendor_data_file_id = var.vendor_data_file_id
     dns {
       servers = var.dns.servers
+      domain  = var.dns.domain
     }
 
     ip_config {
