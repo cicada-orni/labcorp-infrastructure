@@ -1,5 +1,5 @@
-- name: Verify connectivity to DNS servers
-  hosts: dns_servers
+- name: Verify connectivity to LabCorp Rocky servers
+  hosts: rocky_servers
   gather_facts: false
   tasks:
     - name: Verify Ansible connectivity
