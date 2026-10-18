@@ -77,3 +77,9 @@ variable "vendor_data_file_id" {
   type        = string
   description = "Proxmox snippet file ID containing Cloud-init vendor data."
 }
+
+variable "reboot_after_update" {
+  type        = bool
+  default     = true
+  description = "Allow the provider to reboot the VM when applying updates."
+}

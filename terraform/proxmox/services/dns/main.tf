@@ -1,9 +1,10 @@
 module "dns01" {
   source = "../../modules/labcorp-rocky-vm/"
 
-  vm_name   = "dns01"
-  node_name = "pve-node01"
-  pool_id   = "labcorp-services"
+  vm_name             = "dns01"
+  node_name           = "pve-node01"
+  pool_id             = "labcorp-services"
+  reboot_after_update = false
 
   compute = {
     cores     = 2
@@ -28,6 +29,7 @@ module "dns01" {
 
   dns = {
     servers = ["10.50.20.1"]
+    domain  = "labcorp.internal"
   }
 
   user_account = {

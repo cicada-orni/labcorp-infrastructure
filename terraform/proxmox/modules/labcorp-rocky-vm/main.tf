@@ -1,10 +1,11 @@
 resource "proxmox_virtual_environment_vm" "vm" {
-  name          = var.vm_name
-  vm_id         = var.vm_id
-  node_name     = var.node_name
-  pool_id       = var.pool_id
-  scsi_hardware = "virtio-scsi-pci"
-  boot_order    = ["scsi0"]
+  name                = var.vm_name
+  vm_id               = var.vm_id
+  node_name           = var.node_name
+  pool_id             = var.pool_id
+  scsi_hardware       = "virtio-scsi-pci"
+  boot_order          = ["scsi0"]
+  reboot_after_update = var.reboot_after_update
   agent {
     enabled = true
   }
