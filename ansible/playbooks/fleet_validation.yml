@@ -1,0 +1,107 @@
+- name: Validate LabCorp Rocky servers
+  hosts: rocky_servers
+  gather_facts: true
+  tasks:
+
+    # =========================================================================
+    # FV-001 | Host identity
+    # Purpose: Verify the actual hostname matches the inventory name.
+    # =========================================================================
+    - name: "FV-001 | Host identity"
+      tags:
+        - fv_001
+      block:
+        - name: "FV-001 | Verify hostname matches inventory"
+          ansible.builtin.assert:
+            that:
+              - ansible_facts["hostname"] == inventory_hostname
+
+    # =========================================================================
+    # FV-002 | Bootstrap completion
+    # Purpose: Inspect cloud-init completion, errors, and warnings.
+    # =========================================================================
+    - name: "FV-002 | Bootstrap completion"
+      tags:
+        - fv_002
+      block:
+        - name: "FV-002 | Collect cloud-init status"
+          become: true
+          ansible.builtin.command:
+            cmd: cloud-init status --format json
+          register: fleet_cloud_init_status
+          changed_when: false
+          failed_when: "fleet_cloud_init_status.rc not in [0, 2]"
+
+        - name: "FV-002 | Parse cloud-init status report"
+          ansible.builtin.set_fact:    
+            fleet_cloud_init_report: "{{ fleet_cloud_init_status.stdout | from_json }}"
+
+        - name: "FV-002 | Verify cloud-init completed without fatal errors"
+          ansible.builtin.assert:
+            that:
+              - fleet_cloud_init_report['status'] == 'done'
+              - fleet_cloud_init_report['errors'] == []
+            success_msg: "Cloud-init completed without fatal errors."
+            fail_msg: "Cloud-init is incomplete or has recorded fatal errors"
+        
+        - name: "FV-002 | Report cloud-init recoverable warnings"
+          ansible.builtin.debug:
+            var: fleet_cloud_init_report['recoverable_errors']
+          when: fleet_cloud_init_report['recoverable_errors'] != {}
+
+    # =========================================================================
+    # FV-003 | IPv4 network configuration
+    # Purpose: Validate guest IPv4 settings against the intended configuration.
+    # =========================================================================
+    - name: "FV-003 | IPv4 network configuration"
+      tags:
+        - fv_003
+      block:
+        - name: "FV-003 | Verify IPv4 address matches inventory"
+          ansible.builtin.assert:
+            that:
+              - ansible_facts['default_ipv4']['address'] == ansible_host
+            success_msg: "Guest IPv4 address matches inventory."
+            fail_msg: "Guest IPv4 address does not match inventory."
+
+        - name: "FV-003 | Verify IPv4 subnet mask"
+          ansible.builtin.assert:
+            that:
+              - ansible_facts['default_ipv4']['netmask'] == fleet_expected_ipv4_netmask
+            success_msg: "Guest IPv4 subnet mask matches the expected configuration."
+            fail_msg: "Guest IPv4 subnet mask does not match the expected configuration."
+
+        - name: "FV-003 | Verify default IPv4 gateway"
+          ansible.builtin.assert:
+            that:
+              - ansible_facts['default_ipv4']['gateway'] == fleet_expected_ipv4_gateway
+            success_msg: "Guest default IPv4 gateway matches the expected configuration."
+            fail_msg: "Guest default IPv4 gateway does not match the expected configuration."
+
+    # =========================================================================
+    # FV-004 | Resolver configuration and name resolution
+    # Purpose: Validate resolver settings and verify name resolution.
+    # =========================================================================
+    - name: "FV-004 | Resolver configuration and name resolution"
+      tags:
+        - fv_004
+      block:
+        - name: "FV-004 | Verify DNS search suffix"
+          ansible.builtin.assert:
+            that:
+              - ansible_facts['dns']['search'] == [fleet_expected_dns_search] 
+            success_msg: "Guest DNS search suffix matches the expected configuration."
+            fail_msg: "Guest DNS search suffix does not match the expected configuration."
+
+        - name: "FV-004 | Verify configured DNS server"
+          ansible.builtin.assert:
+            that:
+              - ansible_facts['dns']['nameservers'] == [fleet_expected_dns_server] 
+            success_msg: "Guest DNS server matches the expected configuration."
+            fail_msg: "Guest DNS server does not match the expected configuration."
+        
+        - name: "FV-004 | Verify Rocky repository hostname resolves"
+          ansible.builtin.command:
+            cmd: getent ahostsv4 mirrors.rockylinux.org
+          register: fleet_repository_lookup
+          changed_when: false
