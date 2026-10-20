@@ -1,6 +1,7 @@
 - name: Validate LabCorp Rocky servers
   hosts: rocky_servers
   gather_facts: true
+  any_errors_fatal: true
   tasks:
 
     # =========================================================================

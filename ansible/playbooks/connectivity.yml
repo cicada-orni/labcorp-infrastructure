@@ -1,6 +1,7 @@
 - name: Verify connectivity to LabCorp Rocky servers
   hosts: rocky_servers
   gather_facts: false
+  any_errors_fatal: true
   tasks:
     - name: Verify Ansible connectivity
       ansible.builtin.ping:

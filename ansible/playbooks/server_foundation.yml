@@ -1,0 +1,36 @@
+# =========================================================================
+# Server foundation | Pre-change connectivity
+# Purpose: Verify Ansible connectivity and administrative access.
+# =========================================================================
+
+- name: Verify management access before configuration
+  ansible.builtin.import_playbook: connectivity.yml
+
+# =========================================================================
+# Server foundation | Pre-change fleet validation
+# Purpose: Verify host identity, bootstrap, networking, and resolver settings.
+# =========================================================================
+
+- name: Validate fleet readiness before configuration
+  ansible.builtin.import_playbook: fleet_validation.yml
+    
+# =========================================================================
+# Server foundation | Apply baseline
+# Purpose: Apply and verify the shared Rocky Linux configuration.
+# =========================================================================
+- name: Apply the Rocky Linux baseline
+  ansible.builtin.import_playbook: rocky_baseline.yml
+
+# =========================================================================
+# Server foundation | Post-change connectivity
+# Purpose: Verify management access after applying the baseline.
+# =========================================================================
+- name: Verify management access after configuration
+  ansible.builtin.import_playbook: connectivity.yml
+
+# =========================================================================
+# Server foundation | Post-change fleet validation
+# Purpose: Verify fleet settings after applying the baseline.
+# =========================================================================
+- name: Validate fleet readiness after configuration
+  ansible.builtin.import_playbook: fleet_validation.yml

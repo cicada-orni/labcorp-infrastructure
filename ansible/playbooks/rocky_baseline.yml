@@ -1,7 +1,9 @@
 - name: Apply LabCorp Rocky Linux baseline
-  hosts: dns_servers
+  hosts: rocky_servers
   gather_facts: true
   become: true
+  any_errors_fatal: true
+  serial: 1
   vars:
     rocky_baseline_timezone: "Etc/UTC"
     rocky_baseline_ntp_sources:
@@ -70,6 +72,7 @@
         - name: "RLB-004 | Verify only approved DNF repositories are enabled"
           ansible.builtin.assert:
             that:
+              # Return items from the first list that are absent from the second list.
               - (rocky_baseline_enabled_repository_ids | difference(rocky_baseline_approved_repository_ids) | length) == 0
             success_msg: "Only approved DNF repositories are enabled"
             fail_msg: "Unapproved enabled DNF repositories detected: {{ rocky_baseline_enabled_repository_ids | difference(rocky_baseline_approved_repository_ids) }}"
