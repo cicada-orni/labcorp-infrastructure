@@ -1,0 +1,10 @@
+---
+- name: Configure LabCorp DNS servers
+  hosts: dns_servers
+  gather_facts: true
+  become: true
+  order: sorted
+  serial: 1
+  any_errors_fatal: true
+  roles:
+    - labcorp_dns
