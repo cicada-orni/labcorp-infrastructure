@@ -1,0 +1,6 @@
+---
+# handlers file for labcorp_dns
+- name: Restart LabCorp BIND
+  ansible.builtin.systemd_service:
+    name: named
+    state: restarted

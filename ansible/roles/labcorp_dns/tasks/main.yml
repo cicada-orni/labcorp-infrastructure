@@ -1,0 +1,89 @@
+---
+# tasks file for labcorp_dns
+- name: DNS-001 | Ensure BIND is installed
+  tags:
+    - dns_packages
+  ansible.builtin.package:    
+    name: bind
+    state: present
+
+- name: Manage BIND configuration
+  tags:
+    - dns_config
+  block:
+    - name: DNS-002 | Install the primary zone records
+      ansible.builtin.template:
+        src: labcorp.internal.zone.j2
+        dest: /var/named/labcorp.internal.zone
+        owner: root
+        group: named
+        mode: "0640"
+        backup: true
+        validate: /usr/bin/named-checkzone labcorp.internal %s
+      when: labcorp_dns_zone_type == "primary"
+      notify: Restart LabCorp BIND 
+
+    - name: DNS-007 | Install the primary SERVERS reverse zone records
+      ansible.builtin.template:
+        src: 20.50.10.in-addr.arpa.zone.j2
+        dest: "/var/named/{{ labcorp_dns_reverse_zone_file }}" 
+        owner: root
+        group: named
+        mode: "0640"
+        backup: true
+        validate: /usr/bin/named-checkzone 20.50.10.in-addr.arpa %s
+      when: labcorp_dns_zone_type == "primary"
+      notify: Restart LabCorp BIND
+
+    - name: DNS-008 | Install the primary MGMT reverse zone records
+      ansible.builtin.template:
+        src: 10.50.10.in-addr.arpa.zone.j2
+        dest: "/var/named/{{ labcorp_dns_mgmt_reverse_zone_file }}"
+        owner: root
+        group: named
+        mode: "0640"
+        backup: true
+        validate: /usr/bin/named-checkzone 10.50.10.in-addr.arpa %s
+      when: labcorp_dns_zone_type == "primary"
+      notify: Restart LabCorp BIND
+
+    - name: DNS-003 | Install the zone declaration
+      ansible.builtin.template:
+        src: named.labcorp.zones.j2
+        dest: /etc/named.labcorp.zones
+        owner: root
+        group: named
+        mode: "0640"
+        backup: true
+        validate: /usr/bin/named-checkconf %s
+      notify: Restart LabCorp BIND
+
+    - name: DNS-004 | Install the main BIND configuration
+      ansible.builtin.template:
+        src: named.conf.j2
+        dest: /etc/named.conf
+        owner: root
+        group: named
+        mode: "0640"
+        backup: true
+        validate: /usr/bin/named-checkconf %s
+      notify: Restart LabCorp BIND  
+
+- name: DNS-005 | Ensure BIND is running and enabled
+  tags:
+    - dns_service
+  ansible.builtin.systemd_service:
+    name: named
+    state: started
+    enabled: true
+
+- name: DNS-006 | Allow DNS through the host firewall
+  tags:
+    - dns_firewall
+  ansible.posix.firewalld:
+    zone: public
+    service: dns
+    state: enabled
+    permanent: true
+    immediate: true
+      

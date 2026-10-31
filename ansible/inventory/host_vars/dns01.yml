@@ -1,0 +1,6 @@
+---
+labcorp_dns_listen_address: "10.50.20.10"
+labcorp_dns_zone_type: "primary"
+labcorp_dns_zone_file: "labcorp.internal.zone"
+labcorp_dns_reverse_zone_file: "20.50.10.in-addr.arpa.zone"
+labcorp_dns_mgmt_reverse_zone_file: "10.50.10.in-addr.arpa.zone"

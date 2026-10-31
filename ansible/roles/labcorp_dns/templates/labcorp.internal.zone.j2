@@ -1,0 +1,24 @@
+$TTL 300
+$ORIGIN labcorp.internal.
+@ IN SOA dns01.labcorp.internal. hostmaster.labcorp.internal. (
+	2026102501 ; serial
+	3600	   ; refresh
+	900        ; retry
+	604800     ; expire
+        300        ; minimum (negative caching)
+)
+
+@ IN NS dns01.labcorp.internal.
+@ IN NS dns02.labcorp.internal.
+
+dns01 IN A 10.50.20.10
+dns02 IN A 10.50.20.11
+intranet01 IN A 10.50.20.20
+hr-app01 IN A 10.50.20.21
+finance-app01 IN A 10.50.20.22
+db01 IN A 10.50.20.30
+files01 IN A 10.50.20.40
+monitor01 IN A 10.50.10.20
+logs01 IN A 10.50.10.21
+backup01 IN A 10.50.10.22
+dns-test IN A 10.50.20.20
