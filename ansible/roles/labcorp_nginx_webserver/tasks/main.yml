@@ -1,0 +1,45 @@
+---
+- name: Manage Nginx packages
+  tags:
+    - nginx_packages
+  block:
+    - name: NGINX-001 | Ensure Nginx is installed
+      ansible.builtin.package:
+        name: nginx
+        state: present
+
+- name: Manage Nginx service
+  tags: 
+    - nginx_service
+  block:
+    - name: NGINX-002 | Ensure Nginx is running and enabled
+      ansible.builtin.systemd_service:
+        name: nginx
+        state: started
+        enabled: true
+
+- name: Manage Nginx web content
+  tags:
+    - nginx_content
+  block:
+    - name: NGINX-003 | Deploy LabCorp intranet page
+      ansible.builtin.copy:
+        src: labcorp.html
+        dest: /usr/share/nginx/html/labcorp.html
+        owner: root
+        group: root
+        mode: "0644"
+        setype: _default
+        backup: true
+
+- name: Manage Nginx firewall access
+  tags:
+    - nginx_firewall
+  block:
+    - name: NGINX-004 | Allow HTTP though the host firewall
+      ansible.posix.firewalld:
+        zone: public
+        service: http
+        state: enabled
+        permanent: true
+        immediate: true
