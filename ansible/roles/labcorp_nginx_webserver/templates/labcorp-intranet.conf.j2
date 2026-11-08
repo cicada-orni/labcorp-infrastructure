@@ -1,0 +1,8 @@
+server {
+    listen 80;
+    listen [::]:80;
+
+    server_name {{ nginx_webserver_server_name }};
+    root /usr/share/nginx/html;
+    index labcorp.html;
+}
