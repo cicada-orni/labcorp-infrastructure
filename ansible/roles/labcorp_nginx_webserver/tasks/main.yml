@@ -43,3 +43,41 @@
         state: enabled
         permanent: true
         immediate: true
+
+- name: Manage Nginx website confiugration
+  tags:
+    - nginx_config
+  block:
+    - name: NGINX-005 | Deploy LabCorp website configuration
+      ansible.builtin.template:
+        src: labcorp-intranet.conf.j2
+        dest: /etc/nginx/conf.d/labcorp-intranet.conf
+        owner: root
+        group: root
+        mode: "0644"
+        setype: _default
+        backup: true
+      notify: Validate Nginx configuration
+
+- name: Manage Nginx default website
+  tags:
+    - nginx_default
+  block:
+    - name: NGINX-006 | Set the existing IPv4 default server
+      ansible.builtin.lineinfile:
+        path: /etc/nginx/nginx.conf
+        regexp: '^\s*listen\s+80\b'
+        line: '        listen 80 default_server;'
+        backup: true
+        validate: '/usr/sbin/nginx -t -c %s'
+      notify: Validate Nginx configuration
+
+    - name: NGINX-007 | Set the existing IPv6 default server
+      ansible.builtin.lineinfile:
+        path: /etc/nginx/nginx.conf
+        regexp: '^\s*listen\s+\[::\]:80\b'
+        line: '        listen [::]:80 default_server;'
+        backup: true
+        validate: '/usr/sbin/nginx -t -c %s'
+      notify: Validate Nginx configuration
+
