@@ -17,7 +17,7 @@ servers = {
     dns_servers       = ["10.50.20.1"]
     vlan_id           = 20
     cores             = 2
-    memory_mb         = 2048
+    memory_mb         = 4096
     disk_datastore_id = "local-lvm"
     disk_size_gb      = 20
   }
