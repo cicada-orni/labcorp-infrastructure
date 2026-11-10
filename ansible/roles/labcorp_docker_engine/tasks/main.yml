@@ -1,0 +1,58 @@
+---
+- name: Manage Docker prerequisities
+  tags:
+    - docker_prerequisities
+  block:
+    - name: DOCKER-001 | Ensure GnuPG is installed
+      ansible.builtin.package:
+        name: gnupg2
+        state: present
+
+- name: Manage Docker repository
+  tags:
+    - docker_repository
+  block:
+    - name: DOCKER-002 | Ensure Docker signing key is imported
+      ansible.builtin.rpm_key:
+        key: https://download.docker.com/linux/rhel/gpg
+        fingerprint: "060A61C51B558A7F742B77AAC52FEB6B621E9F35"
+        state: present
+
+    - name: DOCKER-003 | Configure Docker stable repository
+      ansible.builtin.yum_repository:
+        name: docker-ce-stable
+        description: "Docker CE Stable - $basearch"
+        file: docker-ce
+        baseurl: "https://download.docker.com/linux/rhel/$releasever/$basearch/stable"
+        enabled: true
+        gpgcheck: true
+        gpgkey: https://download.docker.com/linux/rhel/gpg
+        owner: root
+        group: root
+        mode: "0644"
+        seuser: _default
+        setype: _default
+        state: present
+
+- name: Manage Docker packages
+  tags:
+    - docker_packages
+  block:
+    - name: DOCKER-004 | Ensure Docker Engine and Compose are installed
+      ansible.builtin.package:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-compose-plugin
+        state: present
+
+- name: Manage Docker service
+  tags:
+    - docker_service
+  block:
+    - name: DOCKER-005 | Ensure Docker is running and enabled
+      ansible.builtin.systemd_service:
+        name: docker
+        state: started
+        enabled: true
