@@ -1,0 +1,21 @@
+---
+services:
+  nextcloud:
+    image: "{{ nextcloud_image }}"
+    environment:
+      POSTGRES_HOST: "{{ nextcloud_database_host }}"
+      POSTGRES_DB: "{{ nextcloud_database_name }}"
+      POSTGRES_USER: "{{ nextcloud_database_user }}"
+      POSTGRES_PASSWORD: {{ vault_nextcloud_database_password | replace('$', '$$') | to_json }}
+      NEXTCLOUD_ADMIN_USER: "{{ nextcloud_admin_user }}"
+      NEXTCLOUD_ADMIN_PASSWORD: {{ vault_nextcloud_admin_password | replace('$', '$$') | to_json }}
+      NEXTCLOUD_TRUSTED_DOMAINS: "{{ nextcloud_trusted_domains }}"
+    volumes:
+      - nextcloud_html:/var/www/html
+    ports: 
+      - "127.0.0.1:8080:80"
+    restart: unless-stopped
+    
+
+volumes:
+  nextcloud_html:
