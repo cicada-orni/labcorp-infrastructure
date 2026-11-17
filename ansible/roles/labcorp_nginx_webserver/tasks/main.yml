@@ -81,3 +81,13 @@
         validate: '/usr/sbin/nginx -t -c %s'
       notify: Validate Nginx configuration
 
+
+- name: Manage Nginx SELinux permissions
+  tags:
+    - nginx_selinux
+  block:
+    - name: NGINX-008 | Allow Nginx to initiate network connections
+      ansible.posix.seboolean:
+        name: httpd_can_network_connect
+        state: true
+        persistent: true

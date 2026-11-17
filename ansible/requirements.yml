@@ -5,3 +5,9 @@ collections:
 
   - name: ansible.posix
     version: "2.2.2"
+
+  - name: community.postgresql
+    version: "4.2.0"
+
+  - name: community.docker
+    version: "4.8.9"

@@ -1,0 +1,7 @@
+---
+nextcloud_image: "nextcloud:35.0.2-apache"
+nextcloud_database_host: "10.50.20.30"
+nextcloud_database_name: "nextcloud"
+nextcloud_database_user: "nextcloud"
+nextcloud_admin_user: "ncadmin"
+nextcloud_trusted_domains: "intranet01.labcorp.internal"

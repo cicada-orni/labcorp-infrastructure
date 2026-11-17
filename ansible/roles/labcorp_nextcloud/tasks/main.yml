@@ -1,0 +1,43 @@
+---
+- name: Manage Nextcloud project directory
+  tags:
+    - nextcloud_directories
+  block:
+    - name: NEXTCLOUD-001 | Ensure Nextcloud project directory exists
+      ansible.builtin.file:
+        path: /opt/labcorp/nextcloud
+        state: directory
+        owner: root
+        group: root
+        mode: "0750"
+        setype: _default
+
+- name: Manage NextCloud Compose configuration
+  tags:
+    - nextcloud_config
+  block:
+    - name: NEXTCLOUD-002 | Deploy Nextcloud Compose configuration
+      no_log: true
+      diff: false
+      ansible.builtin.template:
+        src: compose.yaml.j2
+        dest: /opt/labcorp/nextcloud/compose.yaml
+        owner: root
+        group: root
+        mode: "0640"
+        setype: _default
+        backup: true
+        validate: '/usr/bin/docker compose --project-directory /opt/labcorp/nextcloud -f %s config --quiet'
+
+- name: Manage NextCloud deployment
+  tags:
+    - nextcloud_deployment
+  block:
+    - name: NEXTCLOUD-003 | Ensure Nextcloud Compose project is running
+      no_log: true
+      community.docker.docker_compose_v2:
+        project_src: /opt/labcorp/nextcloud
+        state: present
+        pull: missing
+        wait: true
+        wait_timeout: 300

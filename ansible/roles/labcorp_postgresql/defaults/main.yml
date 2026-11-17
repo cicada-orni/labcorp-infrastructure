@@ -1,0 +1,3 @@
+---
+postgresql_database_name: nextcloud
+postgresql_database_user: nextcloud

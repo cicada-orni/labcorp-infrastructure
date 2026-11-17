@@ -1,0 +1,104 @@
+---
+- name: Manage PostgreSQL packages
+  tags:
+    - postgresql_packages
+  block:
+    - name: POSTGRESQL-001 | Ensure PostgreSQL server and Python adapter are installed
+      ansible.builtin.package:
+        name:
+          - postgresql-server
+          - python3-psycopg2
+          - acl
+        state: present
+          
+- name: Manage PostgreSQL initialization
+  tags:
+    - postgresql_initialization
+  block:
+    - name: POSTGRESQL-002 | Initialize PostgreSQL storage
+      ansible.builtin.command:
+        cmd: /usr/bin/postgresql-setup --initdb --unit=postgresql
+        creates: /var/lib/pgsql/data/PG_VERSION
+
+- name: Manage PostgreSQL service
+  tags:
+    - postgresql_service
+  block:
+    - name: POSTGRESQL-003 | Ensure PostgreSQL is running and enabled
+      ansible.builtin.systemd_service:
+        name: postgresql
+        state: started
+        enabled: true
+
+- name: Manage PostgreSQL application account
+  tags:
+    - postgresql_users
+  block:
+    - name: POSTGRESQL-004 | Ensure Nextcloud database login exists
+      become_user: postgres
+      no_log: true
+      community.postgresql.postgresql_user:
+        login_user: postgres
+        login_db: postgres
+        name: "{{ postgresql_database_user }}"
+        password: "{{ vault_nextcloud_database_password }}"
+        role_attr_flags: "LOGIN,NOSUPERUSER,NOCREATEDB,NOCREATEROLE"
+        state: present
+     
+- name: Manage PostgreSQL application database
+  tags:
+    - postgresql_databases
+  block:
+    - name: POSTGRESQL-005 | Ensure NextCloud database exists
+      become_user: postgres
+      community.postgresql.postgresql_db:
+        login_user: postgres
+        maintenance_db: postgres
+        name: "{{ postgresql_database_name }}"
+        owner: "{{ postgresql_database_user }}"
+        encoding: UTF8
+        state: present
+          
+- name: Manage PostgreSQL configuration
+  tags:
+    - postgresql_config
+  block:
+    - name: POSTGRESQL-006 | Configure PostgreSQL listening addresses
+      become_user: postgres
+      ansible.builtin.lineinfile:
+        path: /var/lib/pgsql/data/postgresql.conf
+        regexp: '^\s*#?\s*listen_addresses\s*='
+        line: "listen_addresses = 'localhost,10.50.20.30'"
+        backup: true
+        validate: '/usr/bin/postgres -D /var/lib/pgsql/data -c config_file=%s -C listen_addresses'
+      notify: Restart PostgreSQL
+
+- name: Manage PostgreSQL authentication
+  tags:
+    - postgresql_auth
+  block:
+    - name: POSTGRESQL-007 | Ensure Nextcloud database authentication rule exists
+      become_user: postgres
+      community.postgresql.postgresql_pg_hba:
+        dest: /var/lib/pgsql/data/pg_hba.conf
+        contype: host
+        address: "10.50.20.20/32"
+        databases: "{{ postgresql_database_name }}"
+        users: "{{ postgresql_database_user }}"
+        method: scram-sha-256
+        state: present
+        sort_rules: false
+        backup: true
+      notify: Reload PostgreSQL
+
+- name: Manage PostgreSQL firewall access
+  tags:
+    - postgresql_firewall
+  block:
+    - name: POSTGRESQL-008 | Allow PostgreSQL connections from intranet01
+      ansible.posix.firewalld:
+        zone: public
+        rich_rule: 'rule family="ipv4" source address="10.50.20.20/32" service name="postgresql" accept'
+        state: enabled
+        permanent: true
+        immediate: true
