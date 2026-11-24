@@ -1,0 +1,130 @@
+---
+    # =========================================================================
+    # Collect the Labcorp Issuer certificate request
+    # =========================================================================
+- name: Collect the LabCorp Issuer certificate request
+  hosts: ca01
+  gather_facts: false
+  become: true
+  any_errors_fatal: true
+
+  tasks:
+    - name: Collect Issuer certificate request (csr)
+      tags:
+        - pki_issuer_csr_to_controller
+      block:
+        - name: PKISIGN-001 | Copy Issuer CSR to controller
+          ansible.builtin.fetch:
+            src: /var/lib/labcorp-pki/issuer/issuer_ca.csr
+            dest: /home/faisal/labcorp-pki-transfer/ca01/issuer_ca.csr
+            flat: true
+
+    # =========================================================================
+    # Process the Issuer certificate request on the Root CA
+    # =========================================================================
+- name: Process the Issuer certificate request on the Root CA
+  hosts: ca-root01
+  gather_facts: false
+  become: true
+  any_errors_fatal: true
+  vars_files:
+    - ../vars/nextcloud_secrets.yml
+
+  tasks:
+    - name: Deliver Issuer certificate request
+      tags:
+        - pki_issuer_csr_to_root
+      block:
+        - name: PKISIGN-002 | Copy Issuer CSR to Root CA
+          ansible.builtin.copy:
+            src: /home/faisal/labcorp-pki-transfer/ca01/issuer_ca.csr
+            dest: /var/lib/labcorp-pki/root/issuer_ca.csr
+            owner: root
+            group: root
+            mode: "0600"
+
+    - name: Sign the Issuer CA certificate
+      tags:
+        - pki_issuer_sign
+      block:
+        - name: PKISIGN-003 | Create the Root-signed Issuer certificate
+          community.crypto.x509_certificate:
+            path: /var/lib/labcorp-pki/root/issuer_ca.crt
+            csr_path: /var/lib/labcorp-pki/root/issuer_ca.csr
+            provider: ownca
+            ownca_path: /var/lib/labcorp-pki/root/root_ca.crt
+            ownca_privatekey_path: /var/lib/labcorp-pki/root/root_ca_key
+            ownca_privatekey_passphrase: "{{ vault_pki_root_key_passphrase }}"
+            ownca_digest: sha256
+            ownca_not_before: "+0s"
+            ownca_not_after: "+1095d"
+            ignore_timestamps: true
+            force: false
+            owner: root
+            group: root
+            mode: "0644"
+          no_log: true
+
+    - name: Transfer the signed Issuer certificate
+      tags:
+        - pki_certificate_transfer
+      block:
+        - name: PKISIGN-004 | Copy signed Issuer certificate to controller
+          ansible.builtin.fetch:
+            src: /var/lib/labcorp-pki/root/issuer_ca.crt
+            dest: /home/faisal/labcorp-pki-transfer/ca01/issuer_ca.crt
+            flat: true
+
+    - name: Collect the Root public certificate
+      tags:
+        - pki_root_certificate_to_controller
+      block:
+        - name: PKISIGN-010 | Copy Root certificate to controller
+          ansible.builtin.fetch:
+            src: /var/lib/labcorp-pki/root/root_ca.crt
+            dest: /home/faisal/labcorp-pki-transfer/ca01/root_ca.crt
+            flat: true
+
+
+    # =========================================================================
+    # Deliver the signed certificate to the Issuer CA
+    # =========================================================================
+
+- name: Deliver the signed certificate to the Issuer CA
+  hosts: ca01
+  gather_facts: false
+  become: true
+  any_errors_fatal: true
+  vars_files:
+    - ../vars/nextcloud_secrets.yml
+
+  tasks:
+    - name: Install the signed Issuer certificate
+      tags:
+        - pki_certificate_transfer_to_issuer
+      block:
+        - name: PKISIGN-005 | Copy signed certificate to Issuer CA
+          ansible.builtin.copy:
+            src: /home/faisal/labcorp-pki-transfer/ca01/issuer_ca.crt
+            dest: /var/lib/labcorp-pki/issuer/issuer_ca.crt
+            owner: step
+            group: step
+            mode: "0644"
+
+          
+    - name: Deliver the Root public certificate
+      tags:
+        - pki_root_certificate_to_issuer
+      block:
+        - name: PKISIGN-011 | Copy Root certificate to Issuer CA
+          ansible.builtin.copy:
+            src: /home/faisal/labcorp-pki-transfer/ca01/root_ca.crt
+            dest: /var/lib/labcorp-pki/issuer/root_ca.crt
+            owner: step
+            group: step
+            mode: "0644"
+
+    - name: Run Issuer certificate verification
+      ansible.builtin.import_role:
+        name: labcorp_pki_issuer
+        tasks_from: verify_certificate.yml

@@ -1,0 +1,12 @@
+---
+- name: Configure LabCorp Root CA workspace
+  hosts: ca-root01
+  gather_facts: true
+  become: true
+  any_errors_fatal: true
+  
+  vars_files:
+    - ../vars/nextcloud_secrets.yml
+
+  roles:
+    - labcorp_pki_root

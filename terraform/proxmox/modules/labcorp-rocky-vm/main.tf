@@ -5,6 +5,8 @@ resource "proxmox_virtual_environment_vm" "vm" {
   pool_id             = var.pool_id
   scsi_hardware       = "virtio-scsi-pci"
   boot_order          = ["scsi0"]
+  on_boot             = var.on_boot
+  started             = var.started
   reboot_after_update = var.reboot_after_update
   agent {
     enabled = true
@@ -38,9 +40,10 @@ resource "proxmox_virtual_environment_vm" "vm" {
   }
 
   network_device {
-    model   = "virtio"
-    bridge  = var.network.bridge
-    vlan_id = var.network.vlan_id
+    model        = "virtio"
+    bridge       = var.network.bridge
+    vlan_id      = var.network.vlan_id
+    disconnected = var.network.disconnected
   }
 
   initialization {

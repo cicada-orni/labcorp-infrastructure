@@ -1,0 +1,59 @@
+---
+- name: Verify the delivered Issuer certificate
+  tags:
+    - pki_issuer_certificate_verify
+  block:
+    - name: PKISIGN-006 | Inspect the delivered Issuer certificate
+      community.crypto.x509_certificate_info:
+        path: /var/lib/labcorp-pki/issuer/issuer_ca.crt
+        valid_at:
+          now: "+0s"
+      register: pki_issuer_certificate_info
+
+    - name: PKISIGN-007 | Verify delivered Issuer certificate properties
+      ansible.builtin.assert:
+        that:
+          - pki_issuer_certificate_info.subject.commonName == pki_issuer_common_name
+          - pki_issuer_certificate_info.issuer.commonName == 'LabCorp Root CA'
+          - "'CA:TRUE' in pki_issuer_certificate_info.basic_constraints"
+          - "'pathlen:0' in pki_issuer_certificate_info.basic_constraints"
+          - pki_issuer_certificate_info.basic_constraints_critical
+          - "'Certificate Sign' in pki_issuer_certificate_info.key_usage"
+          - pki_issuer_certificate_info.key_usage_critical
+          - pki_issuer_certificate_info.valid_at.now
+        quiet: false
+        success_msg: "Issuer certificate has the expected names and CA settings, and its dates are currently valid."
+        fail_msg: "Issuer certificate properties did not match the expected settings."
+
+    - name: PKISIGN-008 | Inspect the Issuer key for certificate matching
+      community.crypto.openssl_privatekey_info:
+        path: /var/lib/labcorp-pki/issuer/issuer_ca_key
+        passphrase: "{{ vault_pki_issuer_key_passphrase }}"
+        return_private_key_data: false
+      register: pki_issuer_certificate_key_info
+      no_log: true
+
+    - name: PKISIGN-009 | Verify the certificate matches the Issuer key
+      ansible.builtin.assert:
+        that:
+          - pki_issuer_certificate_key_info.can_load_key
+          - pki_issuer_certificate_key_info.can_parse_key
+          - pki_issuer_certificate_info.public_key == pki_issuer_certificate_key_info.public_key
+        quiet: false
+        success_msg: "Issuer certificate matches the existing Issuer private key."
+        fail_msg: "Issuer key could not be read or its public key did not match the certificate."
+          
+
+- name: Verify the Issuer certificate against the Root CA
+  tags:
+    - pki_issuer_chain_verify
+  block:
+    - name: PKISIGN-012 | Verify the Issuer certificate chain and signature
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/openssl
+          - verify
+          - -trusted
+          - /var/lib/labcorp-pki/issuer/root_ca.crt
+          - /var/lib/labcorp-pki/issuer/issuer_ca.crt
+      changed_when: false

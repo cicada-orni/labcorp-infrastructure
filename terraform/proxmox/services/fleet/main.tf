@@ -5,11 +5,12 @@ module "servers" {
   vm_name   = each.key
   node_name = "pve-node01"
   pool_id   = "labcorp-services"
-
+  on_boot   = each.value.on_boot
+  started   = each.value.started
   network = {
-    bridge  = "vmbr0"
-    vlan_id = each.value.vlan_id
-
+    bridge       = "vmbr0"
+    vlan_id      = each.value.vlan_id
+    disconnected = each.value.network_disconnected
   }
 
   dns = {

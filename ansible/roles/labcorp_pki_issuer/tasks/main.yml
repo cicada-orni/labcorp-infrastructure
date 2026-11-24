@@ -1,0 +1,134 @@
+---
+- name: Manage Issuer CA dependencies
+  tags:
+    - pki_issuer_packages
+  block:
+    - name: PKIISSUER-000 | Ensure Smallstep CA server is installed
+      ansible.builtin.package:
+        name: 
+          - "step-ca-{{ pki_issuer_package_version }}"
+          - python3-cryptography
+          - openssl
+        state: present
+
+- name: Manage Issuer CA service account
+  tags:
+    - pki_issuer_account
+  block:
+    - name: PKIISSUER-001 | Ensure Issuer service group exists
+      ansible.builtin.group:
+        name: "{{ pki_issuer_group }}"
+        system: true
+        state: present
+
+    - name: PKIISSUER-002 | Ensure Issuer service account exists
+      ansible.builtin.user:
+        name: "{{ pki_issuer_user }}"
+        group: "{{ pki_issuer_group }}"
+        system: true
+        home: "{{ pki_issuer_directory }}"
+        create_home: false
+        shell: /sbin/nologin
+        password_lock: true
+        state: present
+
+- name: Manage Issuer CA storage
+  tags:
+    - pki_issuer_storage
+  block:
+    - name: PKIISSUER-003 | Ensure Issuer CA directory exists
+      ansible.builtin.file:
+        path: "{{ pki_issuer_directory }}"
+        state: directory
+        owner: "{{ pki_issuer_user }}"
+        group: "{{ pki_issuer_group }}"
+        mode: "0700"
+
+- name: Manage Issuer CA private key
+  tags:
+    - pki_issuer_bootstrap
+  block:
+    - name: PKIISSUER-004 | Create the encrypted Issuer private key
+      community.crypto.openssl_privatekey:
+        path: "{{ pki_issuer_directory }}/issuer_ca_key"
+        type: RSA
+        size: 4096
+        passphrase: "{{ vault_pki_issuer_key_passphrase }}"
+        cipher: auto
+        regenerate: never
+        owner: "{{ pki_issuer_user }}" 
+        group: "{{ pki_issuer_group }}"
+        mode: "0600"
+      when: pki_issuer_initialize
+      no_log: true  
+
+- name: Verify Issuer CA private key
+  tags:
+    - pki_issuer_verify
+  block:
+    - name: PKIISSUER-005 | Inspect the existing Issuer private key
+      community.crypto.openssl_privatekey_info:
+        path: "{{ pki_issuer_directory }}/issuer_ca_key"
+        passphrase: "{{ vault_pki_issuer_key_passphrase }}"
+        return_private_key_data: false
+      register: pki_issuer_key_info
+      no_log: true
+
+    - name: PKIISSUER-006 | Verify Issuer private-key properties
+      ansible.builtin.assert:
+        that:
+          - pki_issuer_key_info.can_load_key
+          - pki_issuer_key_info.can_parse_key
+          - pki_issuer_key_info.type == 'RSA'
+          - pki_issuer_key_info.public_data.size == 4096
+        quiet: false
+        success_msg: "Issuer private key can be unlocked and is RSA 4096."
+        fail_msg: "Issuer private-key inspection did not match expected settings."
+
+- name: Manage Issuer CA certificate request
+  tags:
+    - pki_issuer_bootstrap
+  block:
+    - name: PKIISSUER-007 | Prepare the Issuer CA certificate request
+      community.crypto.openssl_csr:
+        path: "{{ pki_issuer_directory }}/issuer_ca.csr"
+        privatekey_path: "{{ pki_issuer_directory }}/issuer_ca_key"
+        privatekey_passphrase: "{{ vault_pki_issuer_key_passphrase }}"
+        common_name: "{{ pki_issuer_common_name }}"
+        basic_constraints:
+          - "CA:TRUE"
+          - "pathlen:0"
+        basic_constraints_critical: true
+        key_usage:
+          - keyCertSign
+        key_usage_critical: true
+        use_common_name_for_san: false
+        owner: "{{ pki_issuer_user }}"
+        group: "{{ pki_issuer_group }}"
+        mode: "0600"
+      when: pki_issuer_initialize
+      no_log: true
+        
+- name: Verify Issuer CA certificate request
+  tags:
+    - pki_issuer_verify
+  block:
+    - name: PKIISSUER-008 | Inspect the Issuer CA certificate request
+      community.crypto.openssl_csr_info:
+        path: "{{ pki_issuer_directory }}/issuer_ca.csr"
+      register: pki_issuer_csr_info
+
+    - name: PKIISSUER-009 | Verify Issuer certificate-request properties
+      ansible.builtin.assert:
+        that:
+          - pki_issuer_csr_info.subject.commonName == pki_issuer_common_name
+          - "'CA:TRUE' in pki_issuer_csr_info.basic_constraints"
+          - "'pathlen:0' in pki_issuer_csr_info.basic_constraints"
+          - pki_issuer_csr_info.basic_constraints_critical
+          - "'Certificate Sign' in pki_issuer_csr_info.key_usage"
+          - pki_issuer_csr_info.key_usage_critical
+          - pki_issuer_csr_info.public_key == pki_issuer_key_info.public_key
+        quiet: false
+        success_msg: "Issuer CSR matches its key and expected CA settings."
+        fail_msg: "Issuer CSR inspection did not match expected settings."
+

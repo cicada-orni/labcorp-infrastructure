@@ -1,0 +1,35 @@
+---
+- name: Smallstep repo configuration
+  tags:
+    - smallstep_repo
+  block:
+    - name: STEPCLI-000 | Ensure GnuPG is installed
+      ansible.builtin.package:
+        name: gnupg2
+        state: present
+
+    - name: STEPCLI-001 | Ensure Smallstep package-signing key is imported
+      ansible.builtin.rpm_key:
+        key: "{{ step_cli_gpg_key_url }}"
+        fingerprint: "{{ step_cli_gpg_key_fingerprint }}"
+        state: present
+
+    - name: STEPCLI-002 | Configure Smallstep repository
+      ansible.builtin.yum_repository:
+        name: smallstep
+        description: Smallstep stable repository
+        baseurl: "{{ step_cli_repository_baseurl }}"
+        enabled: true
+        gpgcheck: true
+        gpgkey: "{{ step_cli_gpg_key_url }}"
+        state: present
+
+- name: Smallstep cli installation
+  tags:
+    - smallstep_package
+  block:
+    - name: STEPCLI-003 | Ensure Smallstep CLI is installed
+      ansible.builtin.package:
+        name: "step-cli-{{ step_cli_package_version }}"
+        state: present
+

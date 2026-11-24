@@ -1,0 +1,4 @@
+---
+pki_root_directory: "/var/lib/labcorp-pki/root"
+pki_root_initialize: false
+pki_root_common_name: "LabCorp Root CA"
