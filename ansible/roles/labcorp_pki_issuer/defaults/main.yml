@@ -1,0 +1,7 @@
+---
+pki_issuer_package_version: "0.30.2-1"
+pki_issuer_user: "step"
+pki_issuer_group: "step"
+pki_issuer_directory: "/var/lib/labcorp-pki/issuer"
+pki_issuer_initialize: false
+pki_issuer_common_name: "LabCorp Issuing CA"

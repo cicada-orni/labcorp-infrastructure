@@ -19,6 +19,19 @@ variable "pool_id" {
   description = "Proxmox resource pool that will contain the virtual machine."
 }
 
+variable "on_boot" {
+  type        = bool
+  default     = true
+  description = "Start the VM automatically when the Proxmox host boots."
+}
+
+variable "started" {
+  type        = bool
+  default     = true
+  description = "Whether the VM should be running when Terraform applies the configuration."
+}
+
+
 variable "compute" {
   type = object({
     cores     = number
@@ -40,12 +53,14 @@ variable "disk" {
 
 variable "network" {
   type = object({
-    bridge  = string
-    vlan_id = number
+    bridge       = string
+    vlan_id      = number
+    disconnected = optional(bool, false)
   })
 
   description = "Network connection assigned to the virtual machine."
 }
+
 
 variable "ipv4" {
   type = object({

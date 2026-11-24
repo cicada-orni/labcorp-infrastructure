@@ -11,3 +11,6 @@ collections:
 
   - name: community.docker
     version: "4.8.9"
+
+  - name: community.crypto
+    version: "2.26.0"

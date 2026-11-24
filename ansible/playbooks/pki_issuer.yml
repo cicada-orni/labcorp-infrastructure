@@ -1,0 +1,12 @@
+- name: Configure LabCorp Issuer CA
+  hosts: ca01
+  gather_facts: true
+  become: true
+  any_errors_fatal: true
+
+  vars_files:
+    - ../vars/nextcloud_secrets.yml
+
+  roles:
+    - labcorp_step_cli
+    - labcorp_pki_issuer

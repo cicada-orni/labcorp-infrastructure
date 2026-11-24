@@ -1,0 +1,7 @@
+- name: Install Smallstep CLI on LabCorp Root workspace
+  hosts: ca-root01
+  gather_facts: true
+  become: true
+  any_errors_fatal: true
+  roles:
+    - labcorp_step_cli

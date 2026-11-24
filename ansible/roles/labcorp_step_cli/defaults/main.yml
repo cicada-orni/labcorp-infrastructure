@@ -1,0 +1,5 @@
+---
+step_cli_gpg_key_url: "https://packages.smallstep.com/keys/smallstep-0x889B19391F774443.gpg"
+step_cli_gpg_key_fingerprint: "78E82890D40D5D397D19399F889B19391F774443"
+step_cli_repository_baseurl: "https://packages.smallstep.com/stable/fedora/"
+step_cli_package_version: "0.31.0-1"

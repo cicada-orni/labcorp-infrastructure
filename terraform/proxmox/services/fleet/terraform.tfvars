@@ -109,6 +109,29 @@ servers = {
     disk_datastore_id = "local-lvm"
     disk_size_gb      = 20
   }
+
+  ca01 = {
+    ipv4_address      = "10.50.20.50"
+    ipv4_gateway      = "10.50.20.1"
+    dns_servers       = ["10.50.20.1"]
+    vlan_id           = 20
+    cores             = 1
+    memory_mb         = 2048
+    disk_datastore_id = "local-lvm"
+    disk_size_gb      = 20
+  }
+
+  ca-root01 = {
+    ipv4_address      = "10.50.20.51"
+    ipv4_gateway      = "10.50.20.1"
+    dns_servers       = ["10.50.20.1"]
+    vlan_id           = 20
+    cores             = 1
+    memory_mb         = 2048
+    disk_datastore_id = "local-lvm"
+    disk_size_gb      = 20
+    on_boot           = false
+  }
 }
 
 dns_domain = "labcorp.internal"

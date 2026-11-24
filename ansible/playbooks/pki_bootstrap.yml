@@ -1,0 +1,7 @@
+---
+- name: Prepare the LabCorp Issuer CA
+  ansible.builtin.import_playbook: pki_issuer.yml
+
+- name: Sign and deliver the LabCorp Issuer certificate
+  ansible.builtin.import_playbook: pki_issuer_sign.yml
+

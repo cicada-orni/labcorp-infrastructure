@@ -1,0 +1,133 @@
+---
+- name: Manage Root CA dependencies
+  tags:
+    - pki_root_packages
+  block:
+    - name: PKIROOT-000 | Ensure Python cryptography library is installed
+      ansible.builtin.package:
+        name: python3-cryptography
+        state: present
+
+- name: Manage Root CA storage
+  tags:
+    - pki_root_storage
+  block:
+    - name: PKIROOT-001 | Ensure Root CA directory exists
+      ansible.builtin.file:
+        path: "{{ pki_root_directory }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+- name: Manage Root CA private key
+  tags:
+    - pki_root_bootstrap
+  block:
+    - name: PKIROOT-002 | Create the encrypted Root private key
+      community.crypto.openssl_privatekey:
+        path: "{{ pki_root_directory }}/root_ca_key"
+        type: RSA
+        size: 4096
+        passphrase: "{{ vault_pki_root_key_passphrase }}"
+        cipher: auto
+        regenerate: never
+        owner: root
+        group: root
+        mode: "0600"
+      when: pki_root_initialize
+      no_log: true
+
+- name: Verify Root CA private key
+  tags:
+    - pki_root_verify
+  block:
+    - name: PKIROOT-003 | Inspect the existing Root private key
+      community.crypto.openssl_privatekey_info:
+        path: "{{ pki_root_directory }}/root_ca_key"
+        passphrase: "{{ vault_pki_root_key_passphrase }}"
+        return_private_key_data: false
+      register: pki_root_key_info
+      no_log: true
+
+    - name: PKIROOT-004 | Verify Root private-key properties
+      ansible.builtin.assert:
+        that:
+          - pki_root_key_info.can_load_key
+          - pki_root_key_info.can_parse_key
+          - pki_root_key_info.type == 'RSA'
+          - pki_root_key_info.public_data.size == 4096
+        quiet: false
+        success_msg: "Root private key can be unlocked and is RSA 4096."
+        fail_msg: "Root private-key inspection did not match expected settings."
+
+- name: Manage Root CA certificate request
+  tags:
+    - pki_root_bootstrap
+  block:
+    - name: PKIROOT-005 | Prepare the Root CA certificate request
+      community.crypto.openssl_csr:
+        path: "{{ pki_root_directory }}/root_ca.csr"
+        privatekey_path: "{{ pki_root_directory }}/root_ca_key"
+        privatekey_passphrase: "{{ vault_pki_root_key_passphrase }}"
+        common_name: "{{ pki_root_common_name }}"
+        basic_constraints:
+          - "CA:TRUE"
+        basic_constraints_critical: true
+        key_usage:
+          - keyCertSign
+        key_usage_critical: true
+        use_common_name_for_san: false
+        owner: root
+        group: root
+        mode: "0600"
+      when: pki_root_initialize
+      no_log: true
+
+- name: Manage Root CA certificate
+  tags:
+    - pki_root_bootstrap
+  block:
+    - name: PKIROOT-006 | Create the self-signed Root CA certificate
+      community.crypto.x509_certificate:
+        path: "{{ pki_root_directory }}/root_ca.crt"
+        csr_path: "{{ pki_root_directory }}/root_ca.csr"
+        privatekey_path: "{{ pki_root_directory }}/root_ca_key"
+        privatekey_passphrase: "{{ vault_pki_root_key_passphrase }}"
+        provider: selfsigned
+        selfsigned_digest: sha256
+        selfsigned_not_before: "+0s"
+        selfsigned_not_after: "+3650d"
+        ignore_timestamps: true
+        force: false
+        owner: root
+        group: root
+        mode: "0644"
+      when: pki_root_initialize
+      no_log: true
+
+- name: Verify Root CA certificate
+  tags:
+    - pki_root_verify
+  block:
+    - name: PKIROOT-007 | Inspect the Root CA certificate
+      community.crypto.x509_certificate_info:
+        path: "{{ pki_root_directory }}/root_ca.crt"
+        valid_at:
+          now: "+0s"
+      register: pki_root_certificate_info
+
+    - name: PKIROOT-008 | Verify Root certificate properties
+      ansible.builtin.assert:
+        that:
+          - pki_root_certificate_info.subject.commonName == pki_root_common_name
+          - pki_root_certificate_info.issuer.commonName == pki_root_common_name
+          - "'CA:TRUE' in pki_root_certificate_info.basic_constraints"
+          - pki_root_certificate_info.basic_constraints_critical
+          - "'Certificate Sign' in pki_root_certificate_info.key_usage"
+          - pki_root_certificate_info.key_usage_critical
+          - pki_root_certificate_info.valid_at.now
+          - pki_root_certificate_info.public_key == pki_root_key_info.public_key
+        quiet: false
+        success_msg: "Root certificate matches its key and expected CA settings, and its dates are currently valid."
+        fail_msg: "Root certificate inspection did not match expected settings."
