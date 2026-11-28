@@ -1,0 +1,48 @@
+---
+- name: Manage provisioner storage on the controller
+  tags:
+    - pki_provisioner_storage
+  block:
+    - name: PKIPROV-001 | Ensure provisioner directory exists
+      become: false
+      ansible.builtin.file:
+        path: "{{ pki_provisioner_directory }}"
+        state: directory
+        owner: faisal
+        group: faisal
+        mode: "0700"
+
+- name: Manage provisioner key passphrase on the controller
+  tags:
+    - pki_provisioner_passphrase
+  block:
+    - name: PKIPROV-002 | Store the approval-key passphrase 
+      become: false
+      no_log: true
+      diff: false
+      ansible.builtin.copy:
+        content: "{{ vault_pki_provisioner_key_passphrase }}"
+        dest: "{{ pki_provisioner_directory }}/provisioner_key_passphrase"
+        owner: faisal
+        group: faisal
+        mode: "0600"
+
+- name: Manage provisioner approval keys on the controller
+  tags:
+    - pki_provisioner_keys
+  block:
+    - name: PKIPROV-003 | Create the encrypted approval-key pair
+      become: false
+      no_log: true
+      diff: false
+      ansible.builtin.command:
+        argv:
+          - step
+          - crypto
+          - jwk
+          - create
+          - "{{ pki_provisioner_directory }}/provisioner_public.jwk"
+          - "{{ pki_provisioner_directory }}/provisioner_private.jwe"
+          - --password-file
+          - "{{ pki_provisioner_directory }}/provisioner_key_passphrase"
+        creates: "{{ pki_provisioner_directory }}/provisioner_private.jwe"

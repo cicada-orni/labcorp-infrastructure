@@ -1,0 +1,50 @@
+{
+  "root": "{{ pki_issuer_directory }}/root_ca.crt",
+  "crt": "{{ pki_issuer_directory }}/issuer_ca.crt",
+  "key": "{{ pki_issuer_directory }}/issuer_ca_key",
+  "address": "{{ pki_issuer_listen_address }}",
+  "dnsNames": {{ pki_issuer_dns_names | to_json }},
+  "logger": {
+    "format": "text"
+  },
+  "db": {
+    "type": "badgerv2",
+    "dataSource": "{{ pki_issuer_directory }}/db"
+  },
+  "authority": {
+    "claims": {
+      "minTLSCertDuration": "5m",
+      "maxTLSCertDuration": "168h",
+      "defaultTLSCertDuration": "168h",
+      "disableRenewal": false,
+      "allowRenewalAfterExpiry": false
+    },
+    "policy": {
+      "x509": {
+        "allow": {
+          "dns": [
+            "intranet01.labcorp.internal",
+            "ca01.labcorp.internal"
+          ]
+        },
+        "allowWildcardNames": false
+      }
+    },
+    "provisioners": [
+      {
+        "type": "JWK",
+        "name": "{{ pki_provisioner_name }}",
+        "key": {{ lookup('ansible.builtin.file', pki_provisioner_directory ~ '/provisioner_public.jwk') }}
+      }
+    ]
+  },
+  "tls": {
+    "cipherSuites": [
+      "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256",
+      "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"
+    ],
+    "minVersion": 1.2,
+    "maxVersion": 1.3,
+    "renegotiation": false
+  }
+}

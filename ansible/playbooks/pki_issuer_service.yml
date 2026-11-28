@@ -1,0 +1,15 @@
+---
+- name: Configure the LabCorp Issuer CA service
+  hosts: ca01
+  gather_facts: true
+  become: true
+  any_errors_fatal: true
+
+  vars_files:
+    - ../vars/nextcloud_secrets.yml
+
+  tasks:
+    - name: Configure and start the Issuer CA service
+      ansible.builtin.import_role:
+        name: labcorp_pki_issuer
+        tasks_from: configure_service.yml

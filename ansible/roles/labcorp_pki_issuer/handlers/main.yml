@@ -1,2 +1,9 @@
 ---
-# handlers file for labcorp_pki_issuer
+- name: Reload Issuer CA systemd definitions
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+
+- name: Restart Issuer CA service
+  ansible.builtin.systemd_service:
+    name: step-ca.service
+    state: restarted

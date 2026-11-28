@@ -1,0 +1,16 @@
+---
+- name: Prepare LabCorp certificate approval keys
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+  any_errors_fatal: true
+
+  vars_files:
+    - ../vars/nextcloud_secrets.yml
+
+  tasks:
+    - name: Prepare the provisioner on the controller
+      ansible.builtin.import_role:
+        name: labcorp_pki_issuer
+        tasks_from: prepare_provisioner.yml
