@@ -43,6 +43,24 @@
             success_msg: "LabCorp platform check passed for {{ ansible_distribution }} {{ ansible_distribution_version }}"
             fail_msg: "LabCorp Rocky Linux baseline requires Rocky Linux 10.x"
 
+    - name: Manage DNS-based local hostname resolution
+      tags:
+        - rlb_hostname_resolution
+      when: rocky_baseline_dns_hostname_resolution | default(false) | bool
+      block:
+        - name: Remove hostname-to-loopback entries from cloud-init template
+          ansible.builtin.lineinfile:
+            path: /etc/cloud/templates/hosts.redhat.tmpl
+            regexp: '^(127\.0\.0\.1|::1)\s+\{\{fqdn\}\}\s+\{\{hostname\}\}\s*$'
+            state: absent
+            backup: true
+
+        - name: Remove ca01 hostname-to-loopback entries from current hosts file
+          ansible.builtin.lineinfile:
+            path: /etc/hosts
+            regexp: '^(127\.0\.0\.1|::1)\s+ca01\.labcorp\.internal\s+ca01\s*$'
+            state: absent
+            backup: true
 
     # =========================================================================
     # RLB-004 | Approved repositories and package trust

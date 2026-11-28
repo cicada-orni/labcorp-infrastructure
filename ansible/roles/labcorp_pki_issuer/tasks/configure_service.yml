@@ -1,0 +1,97 @@
+---
+- name: Manage Issuer CA service configuration storage
+  tags:
+    - pki_issuer_storage
+  block:
+    - name: PKIISSUER-010 | Ensure Issuer CA configuration directory exists
+      ansible.builtin.file:
+        path: "{{ pki_issuer_directory }}/config"
+        state: directory
+        owner: "{{ pki_issuer_user }}"
+        group: "{{ pki_issuer_group }}"
+        mode: "0700"
+
+    - name: PKIISSUER-011 | Ensure Issuer CA database directory exists
+      ansible.builtin.file:
+        path: "{{ pki_issuer_directory }}/db"
+        state: directory
+        owner: "{{ pki_issuer_user }}"
+        group: "{{ pki_issuer_group }}"
+        mode: "0700"
+
+- name: Manage Issuer CA service configuration
+  tags:
+    - pki_issuer_configuration
+  block:
+    - name: PKIISSUER-012 | Install Smallstep CA configuration
+      ansible.builtin.template:
+        src: ca.json.j2
+        dest: "{{ pki_issuer_directory }}/config/ca.json"
+        owner: "{{ pki_issuer_user }}"
+        group: "{{ pki_issuer_group }}"
+        mode: "0600"
+        validate: "/usr/bin/python3 -m json.tool %s"
+      notify: Restart Issuer CA service
+
+- name: Manage Issuer CA service key passphrase
+  tags:
+    - pki_issuer_service_passphrase
+  block:
+    - name: PKIISSUER-013 | Store the Issuer-key passphrase
+      no_log: true
+      diff: false
+      ansible.builtin.copy:
+        content: "{{ vault_pki_issuer_key_passphrase }}"
+        dest: "{{ pki_issuer_directory }}/issuer_key_passphrase"
+        owner: "{{ pki_issuer_user }}"
+        group: "{{ pki_issuer_group }}"
+        mode: "0600"
+      notify: Restart Issuer CA service
+
+- name: Manage Issuer CA systemd defination  
+  tags:
+    - pki_issuer_systemd_unit
+  block:
+    - name: PKIISSUER-014 | Install Smallstep CA systemd unit
+      ansible.builtin.template:
+        src: step-ca.service.j2
+        dest: /etc/systemd/system/step-ca.service
+        owner: root
+        group: root
+        mode: "0644"
+      notify:
+        - Reload Issuer CA systemd definitions
+        - Restart Issuer CA service
+
+- name: Manage Issuer CA systemd startup
+  tags:
+    - pki_issuer_systemd_service
+  block:
+    - name: PKIISSUER-015 | Check the installed systemd unit
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/systemd-analyze
+          - verify
+          - /etc/systemd/system/step-ca.service
+      changed_when: false
+
+    - name: PKIISSUER-016 | Apply pending handlers before startup
+      ansible.builtin.meta: flush_handlers
+
+    - name: PKIISSUER-017 | Enable and start Smallstep CA
+      ansible.builtin.systemd_service:
+        name: step-ca.service
+        enabled: true
+        state: started
+
+- name: Manage Issuer CA firewall access
+  tags:
+    - pki_issuer_firewall
+  block:
+    - name: PKIISSUER-018 | Allow controller access to Smallstep CA
+      ansible.posix.firewalld:
+        zone: public
+        rich_rule: 'rule family="ipv4" source address="10.50.10.10/32" port port="9000" protocol="tcp" accept'
+        state: enabled
+        permanent: true
+        immediate: true

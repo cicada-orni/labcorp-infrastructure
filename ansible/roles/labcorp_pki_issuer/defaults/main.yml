@@ -5,3 +5,8 @@ pki_issuer_group: "step"
 pki_issuer_directory: "/var/lib/labcorp-pki/issuer"
 pki_issuer_initialize: false
 pki_issuer_common_name: "LabCorp Issuing CA"
+pki_issuer_listen_address: "10.50.20.50:9000"
+pki_issuer_dns_names: 
+  - "ca01.labcorp.internal"
+pki_provisioner_name: "labcorp-admin"
+pki_provisioner_directory: "/home/faisal/labcorp-pki-provisioner"

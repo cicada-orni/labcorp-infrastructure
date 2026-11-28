@@ -1,0 +1,28 @@
+[Unit]
+Description=LabCorp Issuer CA
+Documentation=https://smallstep.com/docs/step-ca/certificate-authority-server-production/
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=30
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User={{ pki_issuer_user }}
+Group={{ pki_issuer_group }}
+Environment="STEPPATH={{ pki_issuer_directory }}"
+WorkingDirectory={{ pki_issuer_directory }}
+ExecStart=/usr/bin/step-ca {{ pki_issuer_directory }}/config/ca.json --password-file {{ pki_issuer_directory }}/issuer_key_passphrase
+
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
